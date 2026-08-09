@@ -1,4 +1,5 @@
 import { aggregateSystemHealthSeverity } from "./health.js";
+import type { HomeAssistantSceneClient } from "./home-assistant-client.js";
 import { log } from "./logger.js";
 import type { BusyBarDeviceClient } from "./busy-client.js";
 import type { MonitorConfig } from "./config.js";
@@ -36,6 +37,17 @@ export const nextIdleMode = (current: IdleMode, direction: number): IdleMode => 
   return IDLE_MODES[next] ?? "all";
 };
 
+type BusyBarButton = Extract<BusyBarInputEvent, { kind: "button" }>["button"];
+
+export const sceneIdForButton = (
+  config: Extract<MonitorConfig, { enabled: true }>,
+  button: BusyBarButton,
+): string | null => {
+  if (button === "START") return config.startSceneId;
+  if (button === "OK") return config.dialSceneId;
+  return null;
+};
+
 export const desiredDisplayBrightness = (
   weather: WeatherSnapshot | null,
   timeZone: string,
@@ -56,6 +68,7 @@ export const desiredDisplayBrightness = (
 export class Monitor {
   readonly #config: Extract<MonitorConfig, { enabled: true }>;
   readonly #client: BusyBarDeviceClient;
+  readonly #homeAssistant: HomeAssistantSceneClient | null;
   #state: MonitorState = {
     status: null,
     statusReceivedAtMs: null,
@@ -101,9 +114,14 @@ export class Monitor {
   #brightnessQueued = false;
   #idleModeAnnouncementTimer: NodeJS.Timeout | null = null;
 
-  constructor(config: Extract<MonitorConfig, { enabled: true }>, client: BusyBarDeviceClient) {
+  constructor(
+    config: Extract<MonitorConfig, { enabled: true }>,
+    client: BusyBarDeviceClient,
+    homeAssistant: HomeAssistantSceneClient | null = null,
+  ) {
     this.#config = config;
     this.#client = client;
+    this.#homeAssistant = homeAssistant;
   }
 
   async start(): Promise<void> {
@@ -280,6 +298,21 @@ export class Monitor {
     if (event.kind === "switch") return;
     if (event.kind === "button") {
       if (event.action !== "PRESS") return;
+      const sceneId = sceneIdForButton(this.#config, event.button);
+      if (sceneId && this.#homeAssistant) {
+        void this.#homeAssistant
+          .activateScene(sceneId)
+          .then(() => {
+            log.info({ button: event.button, sceneId }, "BUSY Bar smart-home scene activated");
+          })
+          .catch((error: unknown) => {
+            log.warn(
+              { err: error, button: event.button, sceneId },
+              "BUSY Bar smart-home scene activation failed",
+            );
+          });
+        return;
+      }
       this.#state = {
         ...this.#state,
         backPage: event.button === "BACK" ? 0 : nextPage(this.#state.backPage, 1),

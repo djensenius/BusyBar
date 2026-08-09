@@ -2,7 +2,12 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { BusyBarDeviceClient } from "../src/busy-client.js";
 import type { MonitorConfig } from "../src/config.js";
-import { desiredDisplayBrightness, Monitor, nextIdleMode } from "../src/monitor.js";
+import {
+  desiredDisplayBrightness,
+  Monitor,
+  nextIdleMode,
+  sceneIdForButton,
+} from "../src/monitor.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
 import type { WeatherSnapshot } from "../src/weather-client.js";
 
@@ -23,6 +28,9 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   timeZone: "America/Toronto",
   clockEnabled: true,
   lateNightBrightness: 5,
+  homeAssistant: null,
+  startSceneId: null,
+  dialSceneId: null,
   weather: null,
   audioEnabled: false,
   alertSound: null,
@@ -221,5 +229,16 @@ describe("monitor lifecycle", () => {
     expect(nextIdleMode("all", 1)).toBe("weather");
     expect(nextIdleMode("weather", 1)).toBe("clock");
     expect(nextIdleMode("weather", -1)).toBe("all");
+  });
+
+  it("maps Start and dial press to configured Home Assistant scenes", () => {
+    const smartHomeConfig = {
+      ...config,
+      startSceneId: "scene.comfy",
+      dialSceneId: "scene.good_night",
+    };
+    expect(sceneIdForButton(smartHomeConfig, "START")).toBe("scene.comfy");
+    expect(sceneIdForButton(smartHomeConfig, "OK")).toBe("scene.good_night");
+    expect(sceneIdForButton(smartHomeConfig, "BACK")).toBeNull();
   });
 });

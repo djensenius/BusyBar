@@ -4,9 +4,12 @@ export class ConfigurationError extends Error {
   override name = "ConfigurationError";
 }
 
-export interface WeatherConfig {
+export interface HomeAssistantConfig {
   url: string;
   token: string;
+}
+
+export interface WeatherConfig extends HomeAssistantConfig {
   entityId: string;
   sunEntityId: string;
   humidexEntityId: string | null;
@@ -36,6 +39,9 @@ export type MonitorConfig =
       timeZone: string;
       clockEnabled: boolean;
       lateNightBrightness: number;
+      homeAssistant: HomeAssistantConfig | null;
+      startSceneId: string | null;
+      dialSceneId: string | null;
       weather: WeatherConfig | null;
       audioEnabled: boolean;
       alertSound: string | null;
@@ -164,24 +170,44 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
     throw new ConfigurationError("BUSY_BAR_TIME_ZONE must be a valid IANA time zone.");
   }
   const sharedStaleAfterSeconds = optionalInteger(env, "BUSY_BAR_STALE_AFTER_SECONDS", 5, 3600);
+  const startSceneId = entityId(
+    env.BUSY_BAR_START_SCENE_ID,
+    "BUSY_BAR_START_SCENE_ID",
+    "scene",
+    false,
+  );
+  const dialSceneId = entityId(
+    env.BUSY_BAR_DIAL_SCENE_ID,
+    "BUSY_BAR_DIAL_SCENE_ID",
+    "scene",
+    false,
+  );
   const weatherEnabled = boolean(env, "BUSY_BAR_WEATHER_ENABLED", false);
+  const homeAssistantRequired = weatherEnabled || startSceneId !== null || dialSceneId !== null;
+  const homeAssistantUrl = value(env.BUSY_BAR_HOME_ASSISTANT_URL);
+  const homeAssistantToken = value(env.BUSY_BAR_HOME_ASSISTANT_TOKEN);
+  if (homeAssistantRequired && !homeAssistantUrl) {
+    throw new ConfigurationError(
+      "BUSY_BAR_HOME_ASSISTANT_URL is required when Home Assistant features are configured.",
+    );
+  }
+  if (homeAssistantRequired && !homeAssistantToken) {
+    throw new ConfigurationError(
+      "BUSY_BAR_HOME_ASSISTANT_TOKEN is required when Home Assistant features are configured.",
+    );
+  }
+  const homeAssistant =
+    homeAssistantUrl && homeAssistantToken
+      ? {
+          url: url(homeAssistantUrl, "BUSY_BAR_HOME_ASSISTANT_URL", ["http:", "https:"]),
+          token: homeAssistantToken,
+        }
+      : null;
   let weather: WeatherConfig | null = null;
   if (weatherEnabled) {
-    const homeAssistantUrl = value(env.BUSY_BAR_HOME_ASSISTANT_URL);
-    if (!homeAssistantUrl) {
-      throw new ConfigurationError(
-        "BUSY_BAR_HOME_ASSISTANT_URL is required when weather is enabled.",
-      );
-    }
-    const homeAssistantToken = value(env.BUSY_BAR_HOME_ASSISTANT_TOKEN);
-    if (!homeAssistantToken) {
-      throw new ConfigurationError(
-        "BUSY_BAR_HOME_ASSISTANT_TOKEN is required when weather is enabled.",
-      );
-    }
+    if (!homeAssistant) throw new ConfigurationError("Home Assistant configuration is required.");
     weather = {
-      url: url(homeAssistantUrl, "BUSY_BAR_HOME_ASSISTANT_URL", ["http:", "https:"]),
-      token: homeAssistantToken,
+      ...homeAssistant,
       entityId: entityId(
         env.BUSY_BAR_WEATHER_ENTITY_ID,
         "BUSY_BAR_WEATHER_ENTITY_ID",
@@ -245,6 +271,9 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
     timeZone,
     clockEnabled: boolean(env, "BUSY_BAR_CLOCK_ENABLED", true),
     lateNightBrightness: integer(env, "BUSY_BAR_LATE_NIGHT_BRIGHTNESS", 5, 5, 100),
+    homeAssistant,
+    startSceneId,
+    dialSceneId,
     weather,
     audioEnabled,
     alertSound,

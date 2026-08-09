@@ -34,8 +34,31 @@ describe("monitor configuration", () => {
       timeZone: "America/Toronto",
       clockEnabled: true,
       lateNightBrightness: 5,
+      homeAssistant: null,
+      startSceneId: null,
+      dialSceneId: null,
       weather: null,
       audioEnabled: false,
+    });
+  });
+
+  it("configures Home Assistant button scenes", () => {
+    expect(
+      resolveConfig({
+        ...base,
+        BUSY_BAR_HOME_ASSISTANT_URL: "https://homeassistant.example.com",
+        BUSY_BAR_HOME_ASSISTANT_TOKEN: "ha-token",
+        BUSY_BAR_START_SCENE_ID: "scene.comfy",
+        BUSY_BAR_DIAL_SCENE_ID: "scene.good_night",
+      }),
+    ).toMatchObject({
+      homeAssistant: {
+        url: "https://homeassistant.example.com",
+        token: "ha-token",
+      },
+      startSceneId: "scene.comfy",
+      dialSceneId: "scene.good_night",
+      weather: null,
     });
   });
 
@@ -115,6 +138,20 @@ describe("monitor configuration", () => {
     expect(() => resolveConfig({ ...base, BUSY_BAR_WEATHER_ENABLED: "true" })).toThrow(
       "BUSY_BAR_HOME_ASSISTANT_URL",
     );
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_START_SCENE_ID: "scene.comfy",
+      }),
+    ).toThrow("BUSY_BAR_HOME_ASSISTANT_URL");
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_HOME_ASSISTANT_URL: "https://homeassistant.example.com",
+        BUSY_BAR_HOME_ASSISTANT_TOKEN: "ha-token",
+        BUSY_BAR_START_SCENE_ID: "light.comfy",
+      }),
+    ).toThrow("BUSY_BAR_START_SCENE_ID");
     expect(() =>
       resolveConfig({
         ...base,

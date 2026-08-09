@@ -1,5 +1,6 @@
 import { createBusyBarDeviceClient } from "./busy-client.js";
 import { resolveConfig } from "./config.js";
+import { createHomeAssistantSceneClient } from "./home-assistant-client.js";
 import { log } from "./logger.js";
 import { Monitor } from "./monitor.js";
 import {
@@ -30,7 +31,11 @@ export const start = async (): Promise<void> => {
     return;
   }
 
-  const monitor = new Monitor(config, createBusyBarDeviceClient(config));
+  const monitor = new Monitor(
+    config,
+    createBusyBarDeviceClient(config),
+    config.homeAssistant ? createHomeAssistantSceneClient(config.homeAssistant) : null,
+  );
   await monitor.start();
 
   const stream = startOperatorStream(
