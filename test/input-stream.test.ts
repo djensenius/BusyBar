@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decodeBusyBarCloudFrame, decodeBusyBarInputEvents } from "../src/input-stream.js";
+import {
+  busyBarInputWebSocketUrl,
+  decodeBusyBarCloudFrame,
+  decodeBusyBarInputEvents,
+  decodeBusyBarInputFrame,
+} from "../src/input-stream.js";
 
 describe("BUSY Bar input protobuf decoder", () => {
   it("decodes button press and release events", () => {
@@ -33,5 +38,16 @@ describe("BUSY Bar input protobuf decoder", () => {
     expect(
       decodeBusyBarCloudFrame(Buffer.from(JSON.stringify({ bar_id: "device", state: encoded }))),
     ).toEqual(Buffer.from([1, 2, 3]));
+  });
+
+  it("accepts raw local protobuf frames", () => {
+    const bytes = Buffer.from([1, 2, 3]);
+    expect(decodeBusyBarInputFrame(bytes, true)).toEqual(bytes);
+  });
+
+  it("builds an authenticated local WebSocket URL", () => {
+    expect(busyBarInputWebSocketUrl("http://192.168.1.247", "1234567890")).toBe(
+      "ws://192.168.1.247/api/status/ws?x-api-token=1234567890",
+    );
   });
 });

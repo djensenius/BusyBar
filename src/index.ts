@@ -1,5 +1,6 @@
 import { createBusyBarDeviceClient } from "./busy-client.js";
 import { resolveConfig } from "./config.js";
+import { createHomeAssistantSceneClient } from "./home-assistant-client.js";
 import { log } from "./logger.js";
 import { Monitor } from "./monitor.js";
 import {
@@ -7,6 +8,7 @@ import {
   startOperatorStream,
   startSummaryPolling,
 } from "./operator-client.js";
+import { startHomeAssistantWeatherPolling } from "./weather-client.js";
 
 const waitWhileDisabled = (): Promise<void> =>
   new Promise((resolve) => {
@@ -29,7 +31,11 @@ export const start = async (): Promise<void> => {
     return;
   }
 
-  const monitor = new Monitor(config, createBusyBarDeviceClient(config));
+  const monitor = new Monitor(
+    config,
+    createBusyBarDeviceClient(config),
+    config.homeAssistant ? createHomeAssistantSceneClient(config.homeAssistant) : null,
+  );
   await monitor.start();
 
   const stream = startOperatorStream(
@@ -51,6 +57,9 @@ export const start = async (): Promise<void> => {
     config.summaryPollIntervalMs,
     monitor,
   );
+  const weatherPolling = config.weather
+    ? startHomeAssistantWeatherPolling(config.weather, monitor)
+    : null;
 
   let stopping = false;
   const shutdown = (): void => {
@@ -59,6 +68,7 @@ export const start = async (): Promise<void> => {
     stream.stop();
     polling.stop();
     summaryPolling.stop();
+    weatherPolling?.stop();
     void monitor.stop().finally(() => {
       process.exitCode = 0;
     });

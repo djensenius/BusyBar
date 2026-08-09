@@ -1,37 +1,93 @@
 import { aggregateSystemHealthSeverity } from "./health.js";
+import type { HomeAssistantSceneClient } from "./home-assistant-client.js";
 import { log } from "./logger.js";
 import type { BusyBarDeviceClient } from "./busy-client.js";
 import type { MonitorConfig } from "./config.js";
 import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream.js";
 import { startBusyBarInputStream } from "./input-stream.js";
-import type { BackPage, MonitorState } from "./renderer.js";
-import { renderMonitor } from "./renderer.js";
+import type { BackPage, IdleMode, MonitorState, SceneAnnouncement } from "./renderer.js";
+import { availableFrontFrames, renderMonitor } from "./renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
+import type { WeatherSnapshot } from "./weather-client.js";
 
 const nextPage = (page: BackPage, direction: number): BackPage =>
   ((((page + direction) % 3) + 3) % 3) as BackPage;
 
 const nextFrontFrame = (
   current: MonitorState["frontFrame"],
-  hasSummary: boolean,
+  frames: readonly MonitorState["frontFrame"][],
 ): MonitorState["frontFrame"] => {
-  const frames: readonly MonitorState["frontFrame"][] = hasSummary
-    ? ["state", "calls", "messages", "health"]
-    : ["state", "health"];
   const index = frames.indexOf(current);
-  return frames[(index + 1) % frames.length] ?? "state";
+  return frames[(index + 1) % frames.length] ?? frames[0] ?? "callsToday";
+};
+
+const IDLE_MODES: readonly IdleMode[] = [
+  "weather",
+  "clock",
+  "weatherClock",
+  "telephone",
+  "all",
+];
+
+export const nextIdleMode = (current: IdleMode, direction: number): IdleMode => {
+  const index = IDLE_MODES.indexOf(current);
+  const next = (((index + (direction > 0 ? 1 : -1)) % IDLE_MODES.length) +
+    IDLE_MODES.length) %
+    IDLE_MODES.length;
+  return IDLE_MODES[next] ?? "all";
+};
+
+type BusyBarButton = Extract<BusyBarInputEvent, { kind: "button" }>["button"];
+
+export const sceneIdForButton = (
+  config: Extract<MonitorConfig, { enabled: true }>,
+  button: BusyBarButton,
+): string | null => {
+  if (button === "START") return config.startSceneId;
+  if (button === "OK") return config.dialSceneId;
+  return null;
+};
+
+export const sceneAnnouncementLabel = (entityId: string): string =>
+  entityId
+    .replace(/^scene\./, "")
+    .replace(/_/g, " ")
+    .toUpperCase()
+    .slice(0, 12);
+
+export const desiredDisplayBrightness = (
+  weather: WeatherSnapshot | null,
+  timeZone: string,
+  lateNightBrightness: number,
+  nowMs = Date.now(),
+): number | "auto" => {
+  if (weather?.sunState !== "below_horizon") return "auto";
+  const hour = Number(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(nowMs)),
+  );
+  return hour >= 23 || hour < 12 ? lateNightBrightness : "auto";
 };
 
 export class Monitor {
   readonly #config: Extract<MonitorConfig, { enabled: true }>;
   readonly #client: BusyBarDeviceClient;
+  readonly #homeAssistant: HomeAssistantSceneClient | null;
   #state: MonitorState = {
     status: null,
     statusReceivedAtMs: null,
     system: null,
     systemReceivedAtMs: null,
     summary: null,
-    frontFrame: "state",
+    weather: null,
+    weatherReceivedAtMs: null,
+    frontFrame: "callsToday",
+    idleMode: "all",
+    idleModeAnnouncement: null,
+    sceneAnnouncement: null,
     backPage: 0,
     cloudConnected: false,
   };
@@ -61,21 +117,33 @@ export class Monitor {
   #systemSourceAtMs: number | null = null;
   #systemSourceSignature: string | null = null;
   #summarySourceAtMs: number | null = null;
+  #brightnessValue: number | "auto" | null = null;
+  #brightnessUpdating = false;
+  #brightnessQueued = false;
+  #idleModeAnnouncementTimer: NodeJS.Timeout | null = null;
+  #sceneAnnouncementTimer: NodeJS.Timeout | null = null;
 
-  constructor(config: Extract<MonitorConfig, { enabled: true }>, client: BusyBarDeviceClient) {
+  constructor(
+    config: Extract<MonitorConfig, { enabled: true }>,
+    client: BusyBarDeviceClient,
+    homeAssistant: HomeAssistantSceneClient | null = null,
+  ) {
     this.#config = config;
     this.#client = client;
+    this.#homeAssistant = homeAssistant;
   }
 
   async start(): Promise<void> {
-    const deviceId = await this.#client.resolveDeviceId();
+    await this.#client.clear(this.#config.applicationName);
     if (this.#stopped) return;
-    if (deviceId) {
+    if (this.#config.localUrl && this.#config.localAccessKey) {
       this.#inputStream = startBusyBarInputStream({
-        url: this.#config.cloudWebSocketUrl,
-        token: this.#config.token,
-        deviceId,
+        url: this.#config.localUrl,
+        accessKey: this.#config.localAccessKey,
         onInput: (event) => this.#handleInput(event),
+        onFrame: (byteLength, eventCount) => {
+          log.debug({ byteLength, eventCount }, "BUSY Bar input frame received");
+        },
         onStatus: (connected) => {
           log.info({ connected }, "BUSY Bar input stream state changed");
         },
@@ -84,17 +152,23 @@ export class Monitor {
         },
       });
     } else {
-      log.warn("BUSY_BAR_DEVICE_ID is not configured; input navigation is disabled");
+      log.warn(
+        "BUSY_BAR_LOCAL_URL and BUSY_BAR_LOCAL_ACCESS_KEY are not configured; input navigation is disabled",
+      );
     }
 
     this.#started = true;
-    this.#freshnessTimer = setInterval(() => this.#scheduleRender(), 5_000);
+    this.#freshnessTimer = setInterval(() => {
+      this.#scheduleRender();
+      this.#scheduleBrightness();
+    }, 5_000);
     this.#freshnessTimer.unref();
     this.#rotationTimer = setInterval(() => {
       if (this.#state.status?.state !== "idle") return;
+      const frames = availableFrontFrames(this.#state, this.#config, Date.now());
       this.#state = {
         ...this.#state,
-        frontFrame: nextFrontFrame(this.#state.frontFrame, this.#state.summary !== null),
+        frontFrame: nextFrontFrame(this.#state.frontFrame, frames),
       };
       this.#scheduleRender();
     }, this.#config.frontRotationMs);
@@ -137,7 +211,7 @@ export class Monitor {
         }
       }
     }
-    const wasActive = this.#state.status?.state !== "idle";
+    const wasActive = this.#state.status !== null && this.#state.status.state !== "idle";
     const cappedReceivedAtMs = Math.min(receivedAtMs, Date.now());
     this.#statusSourceAtMs = sourceAtMs;
     this.#statusSourceId = sourceId;
@@ -147,7 +221,7 @@ export class Monitor {
       ...this.#state,
       status,
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
-      frontFrame: status.state !== "idle" || wasActive ? "state" : this.#state.frontFrame,
+      frontFrame: status.state === "idle" && wasActive ? "callsToday" : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -173,7 +247,7 @@ export class Monitor {
       ...this.#state,
       system,
       systemReceivedAtMs: Math.min(receivedAtMs, Date.now()),
-      frontFrame: recovered ? "state" : this.#state.frontFrame,
+      frontFrame: recovered ? "callsToday" : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -190,21 +264,118 @@ export class Monitor {
     this.#scheduleRender();
   }
 
+  updateWeather(weather: WeatherSnapshot, receivedAtMs = Date.now()): void {
+    this.#state = {
+      ...this.#state,
+      weather,
+      weatherReceivedAtMs: Math.min(receivedAtMs, Date.now()),
+    };
+    this.#scheduleBrightness();
+    this.#scheduleRender();
+  }
+
+  #scheduleBrightness(): void {
+    if (!this.#started || this.#stopped) return;
+    if (this.#brightnessUpdating) {
+      this.#brightnessQueued = true;
+      return;
+    }
+    const desired = desiredDisplayBrightness(
+      this.#state.weather,
+      this.#config.timeZone,
+      this.#config.lateNightBrightness,
+    );
+    if (desired === this.#brightnessValue) return;
+    this.#brightnessUpdating = true;
+    void this.#client
+      .setBrightness(desired)
+      .then(() => {
+        this.#brightnessValue = desired;
+      })
+      .catch((error: unknown) => {
+        log.warn({ err: error, desired }, "BUSY Bar brightness update failed");
+      })
+      .finally(() => {
+        this.#brightnessUpdating = false;
+        if (!this.#brightnessQueued) return;
+        this.#brightnessQueued = false;
+        this.#scheduleBrightness();
+      });
+  }
+
   #handleInput(event: BusyBarInputEvent): void {
     if (event.kind === "switch") return;
     if (event.kind === "button") {
       if (event.action !== "PRESS") return;
+      const sceneId = sceneIdForButton(this.#config, event.button);
+      if (sceneId && this.#homeAssistant) {
+        void this.#homeAssistant
+          .activateScene(sceneId)
+          .then(() => {
+            log.info({ button: event.button, sceneId }, "BUSY Bar smart-home scene activated");
+            this.#showSceneAnnouncement(sceneId);
+          })
+          .catch((error: unknown) => {
+            log.warn(
+              { err: error, button: event.button, sceneId },
+              "BUSY Bar smart-home scene activation failed",
+            );
+          });
+        return;
+      }
       this.#state = {
         ...this.#state,
         backPage: event.button === "BACK" ? 0 : nextPage(this.#state.backPage, 1),
       };
     } else {
+      const idleMode = nextIdleMode(this.#state.idleMode, event.delta);
+      const state = { ...this.#state, idleMode };
+      const frames = availableFrontFrames(state, this.#config, Date.now());
       this.#state = {
-        ...this.#state,
-        backPage: nextPage(this.#state.backPage, event.delta > 0 ? 1 : -1),
+        ...state,
+        frontFrame: frames[0] ?? "callsToday",
+        idleModeAnnouncement: idleMode,
       };
+      if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
+      this.#idleModeAnnouncementTimer = setTimeout(() => {
+        this.#idleModeAnnouncementTimer = null;
+        this.#state = { ...this.#state, idleModeAnnouncement: null };
+        this.#scheduleRender();
+      }, 1_500);
+      this.#idleModeAnnouncementTimer.unref();
+      log.info({ idleMode }, "BUSY Bar idle mode changed");
     }
     this.#scheduleRender();
+  }
+
+  #showSceneAnnouncement(sceneId: string): void {
+    if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
+    const label = sceneAnnouncementLabel(sceneId);
+    const showPhase = (phase: SceneAnnouncement["phase"]): void => {
+      this.#state = {
+        ...this.#state,
+        sceneAnnouncement: { label, phase },
+      };
+      this.#scheduleRender();
+    };
+    const finish = (): void => {
+      this.#sceneAnnouncementTimer = null;
+      this.#state = { ...this.#state, sceneAnnouncement: null };
+      this.#scheduleRender();
+    };
+    const advanceToDone = (): void => {
+      showPhase(2);
+      this.#sceneAnnouncementTimer = setTimeout(finish, 900);
+      this.#sceneAnnouncementTimer.unref();
+    };
+    const advanceToMiddle = (): void => {
+      showPhase(1);
+      this.#sceneAnnouncementTimer = setTimeout(advanceToDone, 320);
+      this.#sceneAnnouncementTimer.unref();
+    };
+    showPhase(0);
+    this.#sceneAnnouncementTimer = setTimeout(advanceToMiddle, 320);
+    this.#sceneAnnouncementTimer.unref();
   }
 
   #scheduleRender(): void {
@@ -243,7 +414,7 @@ export class Monitor {
       this.#retryTimer = null;
       await this.#maybeAlert(rendered.alertKind);
       if (wasDisconnected) {
-        this.#state = { ...this.#state, frontFrame: "state" };
+        this.#state = { ...this.#state, frontFrame: "callsToday" };
         this.#scheduleRender();
       }
     } catch (error) {
@@ -293,6 +464,8 @@ export class Monitor {
     if (this.#freshnessTimer) clearInterval(this.#freshnessTimer);
     if (this.#rotationTimer) clearInterval(this.#rotationTimer);
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
+    if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
+    if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
     this.#inputStream?.stop();
     this.#stopPromise = (async () => {
       if (this.#activeRender) {

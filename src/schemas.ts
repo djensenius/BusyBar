@@ -110,6 +110,8 @@ export type BoothSystemSnapshotEnvelope = z.infer<typeof BoothSystemSnapshotEnve
 export const MonitorSummarySchema = z.object({
   callsToday: z.number().int().nonnegative(),
   messagesToday: z.number().int().nonnegative(),
+  callsTotal: z.number().int().nonnegative().optional(),
+  messagesTotal: z.number().int().nonnegative().optional(),
   dayStartedAt: z.string().datetime(),
   generatedAt: z.string().datetime(),
   timeZone: z.string().min(1).max(64),
