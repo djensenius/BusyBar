@@ -1,6 +1,6 @@
 services:
   busy-bar:
-    image: ghcr.io/djensenius/telephone-booth-busy-bar:latest
+    image: ghcr.io/djensenius/busybar:latest
     restart: unless-stopped
     init: true
     deploy:

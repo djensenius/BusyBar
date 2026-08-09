@@ -26,4 +26,4 @@ jobs:
       - run: vp run lint
       - run: vp run test
       - run: vp run build
-      - run: docker build --tag telephone-booth-busy-bar:test .
+      - run: docker build --tag busybar:test .
