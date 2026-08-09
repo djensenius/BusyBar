@@ -28,6 +28,7 @@ export type FrontFrame =
   | "messagesTotal"
   | "clock"
   | "weather";
+export type IdleMode = "weather" | "clock" | "weatherClock" | "telephone" | "all";
 export type BackPage = 0 | 1 | 2;
 
 export interface MonitorState {
@@ -39,6 +40,8 @@ export interface MonitorState {
   weather: WeatherSnapshot | null;
   weatherReceivedAtMs: number | null;
   frontFrame: FrontFrame;
+  idleMode: IdleMode;
+  idleModeAnnouncement: IdleMode | null;
   backPage: BackPage;
   cloudConnected: boolean;
 }
@@ -273,16 +276,39 @@ export const availableFrontFrames = (
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): FrontFrame[] => {
-  const frames: FrontFrame[] = ["callsToday", "messagesToday", "callsTotal", "messagesTotal"];
-  if (config.clockEnabled) frames.push("clock");
-  if (
+  const telephoneFrames: FrontFrame[] = [
+    "callsToday",
+    "messagesToday",
+    "callsTotal",
+    "messagesTotal",
+  ];
+  const weatherAvailable = Boolean(
     config.weather &&
-    state.weather &&
-    ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs
-  ) {
-    frames.push("weather");
-  }
-  return frames;
+      state.weather &&
+      ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs,
+  );
+  const selectedFrames =
+    state.idleMode === "weather"
+      ? weatherAvailable
+        ? (["weather"] satisfies FrontFrame[])
+        : []
+      : state.idleMode === "clock"
+        ? config.clockEnabled
+          ? (["clock"] satisfies FrontFrame[])
+          : []
+        : state.idleMode === "weatherClock"
+          ? [
+              ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
+              ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
+            ]
+          : state.idleMode === "telephone"
+            ? telephoneFrames
+            : [
+                ...telephoneFrames,
+                ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
+                ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
+              ];
+  return selectedFrames.length > 0 ? selectedFrames : telephoneFrames;
 };
 
 const healthPresentation = (
@@ -400,7 +426,7 @@ const backLines = (state: MonitorState, nowMs: number): string[] => {
       today,
       `STATE ${status?.state ?? "--"}`,
       `AGE ${status ? Math.round(ageMs(state.statusReceivedAtMs, nowMs) / 1000) : "--"}s`,
-      `MODE ${status?.runtimeMode ?? snapshot?.runtimeMode ?? "--"}`,
+      `VIEW ${state.idleMode.toUpperCase()}`,
       `QUESTION ${shortId(status?.currentQuestionId)}`,
       `MESSAGE ${shortId(status?.currentMessageId)}`,
       `ERROR ${status?.lastError ?? "CLEAR"}`,
@@ -432,6 +458,36 @@ const backLines = (state: MonitorState, nowMs: number): string[] => {
 };
 
 const compactCount = (count: number): string => (count > 999 ? "999+" : String(count));
+
+const idleModePresentation = (
+  mode: IdleMode,
+  dark: boolean,
+): FrontPresentation => {
+  const label =
+    mode === "weatherClock"
+      ? "WX+CLOCK"
+      : mode === "telephone"
+        ? "BOOTH"
+        : mode.toUpperCase();
+  return {
+    elements: [
+      frontBackground(
+        dark
+          ? [COLORS.trueBlack, COLORS.trueBlack]
+          : [COLORS.blueDark, COLORS.cyanDark],
+      ),
+      frontText("front-mode-title", "MODE", 36, 1, "tiny", COLORS.ice, "top_mid"),
+      frontText(
+        "front-mode-value",
+        label,
+        36,
+        10,
+        label.length > 7 ? "condensed" : "large",
+        dark ? COLORS.cyan : COLORS.white,
+      ),
+    ],
+  };
+};
 
 const summaryPresentation = (
   frame: Extract<FrontFrame, "callsToday" | "messagesToday" | "callsTotal" | "messagesTotal">,
@@ -753,6 +809,9 @@ const idlePresentation = (
   nowMs: number,
 ): FrontPresentation => {
   const dark = state.weather?.sunState === "below_horizon";
+  if (state.idleModeAnnouncement) {
+    return idleModePresentation(state.idleModeAnnouncement, dark);
+  }
   const frames = availableFrontFrames(state, config, nowMs);
   const frame = frames.includes(state.frontFrame)
     ? state.frontFrame

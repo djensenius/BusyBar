@@ -50,12 +50,20 @@ Create a stack from [`compose.yaml`](compose.yaml), then define:
 | `BUSY_BAR_OPERATOR_API_URL`     | Operator origin, without `/v1`             |
 | `BUSY_BAR_OPERATOR_TOKEN`       | Monitor-scoped Operator token              |
 | `BUSY_BAR_BOOTH_ID`             | Usually `booth-01`                         |
-| `BUSY_BAR_DEVICE_ID`            | Optional; enables physical page navigation |
+| `BUSY_BAR_LOCAL_URL`            | Optional LAN URL for physical input events |
+| `BUSY_BAR_LOCAL_ACCESS_KEY`     | Password for the BUSY Bar LAN API          |
 | `BUSY_BAR_WEATHER_ENABLED`      | Set `true` to add Home Assistant weather   |
 | `BUSY_BAR_HOME_ASSISTANT_URL`   | Home Assistant origin                      |
 | `BUSY_BAR_HOME_ASSISTANT_TOKEN` | Home Assistant long-lived access token    |
 
 Deploy exactly one replica. The container exposes no ports.
+
+### Physical dial modes
+
+Configure the password-protected local URL and access key to receive physical
+dial events. Turning the dial cycles through Weather, Clock, Weather + Clock,
+Telephone Booth counters, and the full carousel. Active booth states and health
+warnings continue to override the selected idle mode.
 
 ### Updating an existing Portainer stack
 

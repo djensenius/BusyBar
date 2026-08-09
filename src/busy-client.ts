@@ -3,7 +3,6 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import type { MonitorConfig } from "./config.js";
 
 export interface BusyBarDeviceClient {
-  resolveDeviceId(): Promise<string | null>;
   draw(payload: DisplayDrawParams): Promise<void>;
   clear(applicationName: string): Promise<void>;
   setBrightness(value: number | "auto"): Promise<void>;
@@ -15,9 +14,6 @@ export const createBusyBarDeviceClient = (
 ): BusyBarDeviceClient => {
   const bar = new BusyBar({ addr: config.apiUrl, token: config.token, timeout: 5_000 });
   return {
-    resolveDeviceId(): Promise<string | null> {
-      return Promise.resolve(config.deviceId);
-    },
     async draw(payload: DisplayDrawParams): Promise<void> {
       await bar.DisplayDraw(payload);
     },

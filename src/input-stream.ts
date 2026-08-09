@@ -8,9 +8,9 @@ export type BusyBarInputEvent =
 
 interface BusyBarInputStreamOptions {
   url: string;
-  token: string;
-  deviceId: string;
+  accessKey: string;
   onInput(event: BusyBarInputEvent): void;
+  onFrame?(byteLength: number, eventCount: number): void;
   onStatus(connected: boolean): void;
   onError(error: Error): void;
 }
@@ -99,6 +99,26 @@ export const decodeBusyBarCloudFrame = (data: WebSocket.RawData): Uint8Array | n
   return Buffer.from(frame.state, "base64");
 };
 
+export const decodeBusyBarInputFrame = (
+  data: WebSocket.RawData,
+  isBinary: boolean,
+): Uint8Array | null => {
+  if (!isBinary) return decodeBusyBarCloudFrame(data);
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (Array.isArray(data)) return Buffer.concat(data);
+  return null;
+};
+
+export const busyBarInputWebSocketUrl = (url: string, accessKey: string): string => {
+  const parsed = new URL(url);
+  parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+  parsed.pathname = "/api/status/ws";
+  parsed.search = "";
+  parsed.searchParams.set("x-api-token", accessKey);
+  return parsed.toString();
+};
+
 export const decodeBusyBarInputEvents = (bytes: Uint8Array): BusyBarInputEvent[] => {
   const message = StateType.decode(bytes);
   const decoded = StateType.toObject(message, {
@@ -154,19 +174,22 @@ export const startBusyBarInputStream = (
 
   const connect = (): void => {
     if (stopped) return;
-    const current = new WebSocket(options.url);
+    const current = new WebSocket(
+      busyBarInputWebSocketUrl(options.url, options.accessKey),
+    );
     socket = current;
     current.on("open", () => {
       attempt = 0;
       options.onStatus(true);
-      current.send(JSON.stringify({ token: options.token }));
-      current.send(JSON.stringify({ subscribe: [options.deviceId] }));
+      current.send(JSON.stringify({ enable: true }));
     });
-    current.on("message", (data) => {
-      const bytes = decodeBusyBarCloudFrame(data);
+    current.on("message", (data, isBinary) => {
+      const bytes = decodeBusyBarInputFrame(data, isBinary);
       if (!bytes) return;
       try {
-        for (const event of decodeBusyBarInputEvents(bytes)) options.onInput(event);
+        const events = decodeBusyBarInputEvents(bytes);
+        options.onFrame?.(bytes.byteLength, events.length);
+        for (const event of events) options.onInput(event);
       } catch (error) {
         options.onError(
           error instanceof Error ? error : new Error("BUSY Bar input protobuf decode failed"),
@@ -181,8 +204,8 @@ export const startBusyBarInputStream = (
       socket = null;
       options.onStatus(false);
       if (!stopped) {
-        if (code === 3000) {
-          options.onError(new Error("BUSY Bar cloud input authentication failed"));
+        if (code === 3000 || code === 1008) {
+          options.onError(new Error("BUSY Bar local input authentication failed"));
           return;
         }
         reconnect();

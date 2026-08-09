@@ -2,7 +2,7 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { BusyBarDeviceClient } from "../src/busy-client.js";
 import type { MonitorConfig } from "../src/config.js";
-import { desiredDisplayBrightness, Monitor } from "../src/monitor.js";
+import { desiredDisplayBrightness, Monitor, nextIdleMode } from "../src/monitor.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
 import type { WeatherSnapshot } from "../src/weather-client.js";
 
@@ -10,9 +10,9 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   enabled: true,
   token: "cloud-token",
   apiUrl: "https://api.busy.app",
-  cloudWebSocketUrl: "wss://api.busy.app/api/v1/bars/ws",
   boothId: "booth-01",
-  deviceId: null,
+  localUrl: null,
+  localAccessKey: null,
   applicationName: "telephone-booth-monitor",
   displayPriority: 100,
   statusStaleAfterMs: 75_000,
@@ -64,7 +64,6 @@ const createClient = (): BusyBarDeviceClient & {
   clear: ReturnType<typeof vi.fn>;
   setBrightness: ReturnType<typeof vi.fn>;
 } => ({
-  resolveDeviceId: vi.fn(() => Promise.resolve(null)),
   draw: vi.fn(() => Promise.resolve()),
   clear: vi.fn(() => Promise.resolve()),
   setBrightness: vi.fn(() => Promise.resolve()),
@@ -181,12 +180,12 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
-  it("does not leave timers running when cloud discovery fails", async () => {
+  it("does not leave timers running when display startup fails", async () => {
     const client = createClient();
-    client.resolveDeviceId = vi.fn(() => Promise.reject(new Error("cloud unavailable")));
+    client.clear = vi.fn(() => Promise.reject(new Error("display unavailable")));
     const monitor = new Monitor(config, client);
 
-    await expect(monitor.start()).rejects.toThrow("cloud unavailable");
+    await expect(monitor.start()).rejects.toThrow("display unavailable");
 
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -216,5 +215,11 @@ describe("monitor lifecycle", () => {
         Date.parse("2026-08-09T10:00:00.000Z"),
       ),
     ).toBe("auto");
+  });
+
+  it("cycles through idle modes in both dial directions", () => {
+    expect(nextIdleMode("all", 1)).toBe("weather");
+    expect(nextIdleMode("weather", 1)).toBe("clock");
+    expect(nextIdleMode("weather", -1)).toBe("all");
   });
 });

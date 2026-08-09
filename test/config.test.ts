@@ -28,7 +28,6 @@ describe("monitor configuration", () => {
     expect(resolveConfig(base)).toMatchObject({
       enabled: true,
       apiUrl: "https://api.busy.app",
-      cloudWebSocketUrl: "wss://api.busy.app/api/v1/bars/ws",
       statusStaleAfterMs: 75_000,
       systemStaleAfterMs: 20_000,
       summaryPollIntervalMs: 30_000,
@@ -68,6 +67,19 @@ describe("monitor configuration", () => {
     });
   });
 
+  it("configures password-protected local input", () => {
+    expect(
+      resolveConfig({
+        ...base,
+        BUSY_BAR_LOCAL_URL: "http://192.168.1.247",
+        BUSY_BAR_LOCAL_ACCESS_KEY: "1234567890",
+      }),
+    ).toMatchObject({
+      localUrl: "http://192.168.1.247",
+      localAccessKey: "1234567890",
+    });
+  });
+
   it("keeps the legacy shared timeout as a fallback", () => {
     expect(
       resolveConfig({
@@ -97,6 +109,9 @@ describe("monitor configuration", () => {
     expect(() => resolveConfig({ ...base, BUSY_BAR_AUDIO_ENABLED: "true" })).toThrow(
       "BUSY_BAR_ALERT_SOUND",
     );
+    expect(() =>
+      resolveConfig({ ...base, BUSY_BAR_LOCAL_URL: "http://192.168.1.247" }),
+    ).toThrow("configured together");
     expect(() => resolveConfig({ ...base, BUSY_BAR_WEATHER_ENABLED: "true" })).toThrow(
       "BUSY_BAR_HOME_ASSISTANT_URL",
     );

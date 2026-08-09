@@ -4,7 +4,7 @@ import type { BusyBarDeviceClient } from "./busy-client.js";
 import type { MonitorConfig } from "./config.js";
 import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream.js";
 import { startBusyBarInputStream } from "./input-stream.js";
-import type { BackPage, MonitorState } from "./renderer.js";
+import type { BackPage, IdleMode, MonitorState } from "./renderer.js";
 import { availableFrontFrames, renderMonitor } from "./renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
 import type { WeatherSnapshot } from "./weather-client.js";
@@ -18,6 +18,22 @@ const nextFrontFrame = (
 ): MonitorState["frontFrame"] => {
   const index = frames.indexOf(current);
   return frames[(index + 1) % frames.length] ?? frames[0] ?? "callsToday";
+};
+
+const IDLE_MODES: readonly IdleMode[] = [
+  "weather",
+  "clock",
+  "weatherClock",
+  "telephone",
+  "all",
+];
+
+export const nextIdleMode = (current: IdleMode, direction: number): IdleMode => {
+  const index = IDLE_MODES.indexOf(current);
+  const next = (((index + (direction > 0 ? 1 : -1)) % IDLE_MODES.length) +
+    IDLE_MODES.length) %
+    IDLE_MODES.length;
+  return IDLE_MODES[next] ?? "all";
 };
 
 export const desiredDisplayBrightness = (
@@ -49,6 +65,8 @@ export class Monitor {
     weather: null,
     weatherReceivedAtMs: null,
     frontFrame: "callsToday",
+    idleMode: "all",
+    idleModeAnnouncement: null,
     backPage: 0,
     cloudConnected: false,
   };
@@ -81,6 +99,7 @@ export class Monitor {
   #brightnessValue: number | "auto" | null = null;
   #brightnessUpdating = false;
   #brightnessQueued = false;
+  #idleModeAnnouncementTimer: NodeJS.Timeout | null = null;
 
   constructor(config: Extract<MonitorConfig, { enabled: true }>, client: BusyBarDeviceClient) {
     this.#config = config;
@@ -88,16 +107,16 @@ export class Monitor {
   }
 
   async start(): Promise<void> {
-    const deviceId = await this.#client.resolveDeviceId();
-    if (this.#stopped) return;
     await this.#client.clear(this.#config.applicationName);
     if (this.#stopped) return;
-    if (deviceId) {
+    if (this.#config.localUrl && this.#config.localAccessKey) {
       this.#inputStream = startBusyBarInputStream({
-        url: this.#config.cloudWebSocketUrl,
-        token: this.#config.token,
-        deviceId,
+        url: this.#config.localUrl,
+        accessKey: this.#config.localAccessKey,
         onInput: (event) => this.#handleInput(event),
+        onFrame: (byteLength, eventCount) => {
+          log.debug({ byteLength, eventCount }, "BUSY Bar input frame received");
+        },
         onStatus: (connected) => {
           log.info({ connected }, "BUSY Bar input stream state changed");
         },
@@ -106,7 +125,9 @@ export class Monitor {
         },
       });
     } else {
-      log.warn("BUSY_BAR_DEVICE_ID is not configured; input navigation is disabled");
+      log.warn(
+        "BUSY_BAR_LOCAL_URL and BUSY_BAR_LOCAL_ACCESS_KEY are not configured; input navigation is disabled",
+      );
     }
 
     this.#started = true;
@@ -264,10 +285,22 @@ export class Monitor {
         backPage: event.button === "BACK" ? 0 : nextPage(this.#state.backPage, 1),
       };
     } else {
+      const idleMode = nextIdleMode(this.#state.idleMode, event.delta);
+      const state = { ...this.#state, idleMode };
+      const frames = availableFrontFrames(state, this.#config, Date.now());
       this.#state = {
-        ...this.#state,
-        backPage: nextPage(this.#state.backPage, event.delta > 0 ? 1 : -1),
+        ...state,
+        frontFrame: frames[0] ?? "callsToday",
+        idleModeAnnouncement: idleMode,
       };
+      if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
+      this.#idleModeAnnouncementTimer = setTimeout(() => {
+        this.#idleModeAnnouncementTimer = null;
+        this.#state = { ...this.#state, idleModeAnnouncement: null };
+        this.#scheduleRender();
+      }, 1_500);
+      this.#idleModeAnnouncementTimer.unref();
+      log.info({ idleMode }, "BUSY Bar idle mode changed");
     }
     this.#scheduleRender();
   }
@@ -358,6 +391,7 @@ export class Monitor {
     if (this.#freshnessTimer) clearInterval(this.#freshnessTimer);
     if (this.#rotationTimer) clearInterval(this.#rotationTimer);
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
+    if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
     this.#inputStream?.stop();
     this.#stopPromise = (async () => {
       if (this.#activeRender) {

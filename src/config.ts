@@ -23,9 +23,9 @@ export type MonitorConfig =
       enabled: true;
       token: string;
       apiUrl: string;
-      cloudWebSocketUrl: string;
       boothId: string;
-      deviceId: string | null;
+      localUrl: string | null;
+      localAccessKey: string | null;
       applicationName: string;
       displayPriority: number;
       statusStaleAfterMs: number;
@@ -141,6 +141,16 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
   if (!operatorApiUrl) throw new ConfigurationError("BUSY_BAR_OPERATOR_API_URL is required.");
   const boothId = value(env.BUSY_BAR_BOOTH_ID);
   if (!boothId) throw new ConfigurationError("BUSY_BAR_BOOTH_ID is required.");
+  const localUrlValue = value(env.BUSY_BAR_LOCAL_URL);
+  const localAccessKey = value(env.BUSY_BAR_LOCAL_ACCESS_KEY);
+  if ((localUrlValue === undefined) !== (localAccessKey === undefined)) {
+    throw new ConfigurationError(
+      "BUSY_BAR_LOCAL_URL and BUSY_BAR_LOCAL_ACCESS_KEY must be configured together.",
+    );
+  }
+  if (localAccessKey && !/^\d{4,10}$/.test(localAccessKey)) {
+    throw new ConfigurationError("BUSY_BAR_LOCAL_ACCESS_KEY must contain 4 to 10 digits.");
+  }
 
   const audioEnabled = boolean(env, "BUSY_BAR_AUDIO_ENABLED", false);
   const alertSound = value(env.BUSY_BAR_ALERT_SOUND) ?? null;
@@ -216,13 +226,11 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
     apiUrl: url(value(env.BUSY_BAR_API_URL) ?? "https://api.busy.app", "BUSY_BAR_API_URL", [
       "https:",
     ]),
-    cloudWebSocketUrl: url(
-      value(env.BUSY_BAR_CLOUD_WS_URL) ?? "wss://api.busy.app/api/v1/bars/ws",
-      "BUSY_BAR_CLOUD_WS_URL",
-      ["wss:"],
-    ),
     boothId,
-    deviceId: value(env.BUSY_BAR_DEVICE_ID) ?? null,
+    localUrl: localUrlValue
+      ? url(localUrlValue, "BUSY_BAR_LOCAL_URL", ["http:", "https:"])
+      : null,
+    localAccessKey: localAccessKey ?? null,
     applicationName: value(env.BUSY_BAR_APPLICATION_NAME) ?? "telephone-booth-monitor",
     displayPriority: integer(env, "BUSY_BAR_DISPLAY_PRIORITY", 100, 1, 100),
     statusStaleAfterMs:

@@ -2,7 +2,7 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import { describe, expect, it } from "vite-plus/test";
 import type { MonitorConfig } from "../src/config.js";
 import type { MonitorState } from "../src/renderer.js";
-import { renderMonitor } from "../src/renderer.js";
+import { availableFrontFrames, renderMonitor } from "../src/renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
 import { WeatherConditionSchema } from "../src/weather-client.js";
 import type { WeatherSnapshot } from "../src/weather-client.js";
@@ -13,9 +13,9 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   enabled: true,
   token: "cloud-token",
   apiUrl: "https://api.busy.app",
-  cloudWebSocketUrl: "wss://api.busy.app/api/v1/bars/ws",
   boothId: "booth-01",
-  deviceId: null,
+  localUrl: null,
+  localAccessKey: null,
   applicationName: "telephone-booth-monitor",
   displayPriority: 100,
   statusStaleAfterMs: 75_000,
@@ -103,6 +103,8 @@ const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   weather: null,
   weatherReceivedAtMs: null,
   frontFrame: "callsToday",
+  idleMode: "all",
+  idleModeAnnouncement: null,
   backPage: 0,
   cloudConnected: true,
   ...overrides,
@@ -164,6 +166,46 @@ describe("monitor renderer", () => {
     expect(
       textsFor(renderMonitor(model({ frontFrame: "clock" }), config, now).payload, "front"),
     ).toEqual(["JUL 31", "16:00"]);
+  });
+
+  it("filters carousel frames by the selected idle mode", () => {
+    const state = model({
+      weather,
+      weatherReceivedAtMs: now - 1_000,
+    });
+    expect(
+      availableFrontFrames({ ...state, idleMode: "weather" }, weatherEnabledConfig, now),
+    ).toEqual(["weather"]);
+    expect(
+      availableFrontFrames({ ...state, idleMode: "clock" }, weatherEnabledConfig, now),
+    ).toEqual(["clock"]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "weatherClock" },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual(["weather", "clock"]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "telephone" },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual(["callsToday", "messagesToday", "callsTotal", "messagesTotal"]);
+  });
+
+  it("shows a temporary mode confirmation", () => {
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ idleMode: "weatherClock", idleModeAnnouncement: "weatherClock" }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["MODE", "WX+CLOCK"]);
   });
 
   it("renders smart weather details and every Home Assistant condition", () => {
