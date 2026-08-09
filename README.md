@@ -1,4 +1,4 @@
-# Telephone-Booth BUSY Bar
+# BusyBar
 
 Standalone physical status monitor for the
 [Telephone-Booth](https://github.com/djensenius/Telephone-Booth) art
@@ -84,7 +84,7 @@ the front display.
 4. Use `75` seconds for status freshness, `20` seconds for system freshness,
    and `America/Toronto` for the daily reset unless the booth configuration
    differs.
-5. Pull `ghcr.io/djensenius/telephone-booth-busy-bar:latest` and redeploy the
+5. Pull `ghcr.io/djensenius/busybar:latest` and redeploy the
    stack.
 6. Verify the idle carousel, active-call overrides, structured logs, and
    recovery after restarting the container.
