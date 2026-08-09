@@ -5,7 +5,7 @@ import type { BusyBarDeviceClient } from "./busy-client.js";
 import type { MonitorConfig } from "./config.js";
 import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream.js";
 import { startBusyBarInputStream } from "./input-stream.js";
-import type { BackPage, IdleMode, MonitorState } from "./renderer.js";
+import type { BackPage, IdleMode, MonitorState, SceneAnnouncement } from "./renderer.js";
 import { availableFrontFrames, renderMonitor } from "./renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
 import type { WeatherSnapshot } from "./weather-client.js";
@@ -48,6 +48,13 @@ export const sceneIdForButton = (
   return null;
 };
 
+export const sceneAnnouncementLabel = (entityId: string): string =>
+  entityId
+    .replace(/^scene\./, "")
+    .replace(/_/g, " ")
+    .toUpperCase()
+    .slice(0, 12);
+
 export const desiredDisplayBrightness = (
   weather: WeatherSnapshot | null,
   timeZone: string,
@@ -80,6 +87,7 @@ export class Monitor {
     frontFrame: "callsToday",
     idleMode: "all",
     idleModeAnnouncement: null,
+    sceneAnnouncement: null,
     backPage: 0,
     cloudConnected: false,
   };
@@ -113,6 +121,7 @@ export class Monitor {
   #brightnessUpdating = false;
   #brightnessQueued = false;
   #idleModeAnnouncementTimer: NodeJS.Timeout | null = null;
+  #sceneAnnouncementTimer: NodeJS.Timeout | null = null;
 
   constructor(
     config: Extract<MonitorConfig, { enabled: true }>,
@@ -304,6 +313,7 @@ export class Monitor {
           .activateScene(sceneId)
           .then(() => {
             log.info({ button: event.button, sceneId }, "BUSY Bar smart-home scene activated");
+            this.#showSceneAnnouncement(sceneId);
           })
           .catch((error: unknown) => {
             log.warn(
@@ -336,6 +346,36 @@ export class Monitor {
       log.info({ idleMode }, "BUSY Bar idle mode changed");
     }
     this.#scheduleRender();
+  }
+
+  #showSceneAnnouncement(sceneId: string): void {
+    if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
+    const label = sceneAnnouncementLabel(sceneId);
+    const showPhase = (phase: SceneAnnouncement["phase"]): void => {
+      this.#state = {
+        ...this.#state,
+        sceneAnnouncement: { label, phase },
+      };
+      this.#scheduleRender();
+    };
+    const finish = (): void => {
+      this.#sceneAnnouncementTimer = null;
+      this.#state = { ...this.#state, sceneAnnouncement: null };
+      this.#scheduleRender();
+    };
+    const advanceToDone = (): void => {
+      showPhase(2);
+      this.#sceneAnnouncementTimer = setTimeout(finish, 900);
+      this.#sceneAnnouncementTimer.unref();
+    };
+    const advanceToMiddle = (): void => {
+      showPhase(1);
+      this.#sceneAnnouncementTimer = setTimeout(advanceToDone, 320);
+      this.#sceneAnnouncementTimer.unref();
+    };
+    showPhase(0);
+    this.#sceneAnnouncementTimer = setTimeout(advanceToMiddle, 320);
+    this.#sceneAnnouncementTimer.unref();
   }
 
   #scheduleRender(): void {
@@ -425,6 +465,7 @@ export class Monitor {
     if (this.#rotationTimer) clearInterval(this.#rotationTimer);
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
+    if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
     this.#inputStream?.stop();
     this.#stopPromise = (async () => {
       if (this.#activeRender) {

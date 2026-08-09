@@ -6,6 +6,7 @@ import {
   desiredDisplayBrightness,
   Monitor,
   nextIdleMode,
+  sceneAnnouncementLabel,
   sceneIdForButton,
 } from "../src/monitor.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
@@ -240,5 +241,6 @@ describe("monitor lifecycle", () => {
     expect(sceneIdForButton(smartHomeConfig, "START")).toBe("scene.comfy");
     expect(sceneIdForButton(smartHomeConfig, "OK")).toBe("scene.good_night");
     expect(sceneIdForButton(smartHomeConfig, "BACK")).toBeNull();
+    expect(sceneAnnouncementLabel("scene.good_night")).toBe("GOOD NIGHT");
   });
 });

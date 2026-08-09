@@ -108,6 +108,7 @@ const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   frontFrame: "callsToday",
   idleMode: "all",
   idleModeAnnouncement: null,
+  sceneAnnouncement: null,
   backPage: 0,
   cloudConnected: true,
   ...overrides,
@@ -209,6 +210,23 @@ describe("monitor renderer", () => {
         "front",
       ),
     ).toEqual(["MODE", "WX+CLOCK"]);
+  });
+
+  it("renders progressive smart-home scene confirmation frames", () => {
+    const first = renderMonitor(
+      model({ sceneAnnouncement: { label: "COMFY", phase: 0 } }),
+      config,
+      now,
+    );
+    const final = renderMonitor(
+      model({ sceneAnnouncement: { label: "GOOD NIGHT", phase: 2 } }),
+      config,
+      now,
+    );
+
+    expect(textsFor(first.payload, "front")).toEqual(["SCENE", "COMFY"]);
+    expect(textsFor(final.payload, "front")).toEqual(["SCENE", "GOOD NIGHT"]);
+    expect(frontFillColors(first.payload)).not.toEqual(frontFillColors(final.payload));
   });
 
   it("renders smart weather details and every Home Assistant condition", () => {

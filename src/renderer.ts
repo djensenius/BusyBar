@@ -30,6 +30,10 @@ export type FrontFrame =
   | "weather";
 export type IdleMode = "weather" | "clock" | "weatherClock" | "telephone" | "all";
 export type BackPage = 0 | 1 | 2;
+export interface SceneAnnouncement {
+  label: string;
+  phase: 0 | 1 | 2;
+}
 
 export interface MonitorState {
   status: BoothStatus | null;
@@ -42,6 +46,7 @@ export interface MonitorState {
   frontFrame: FrontFrame;
   idleMode: IdleMode;
   idleModeAnnouncement: IdleMode | null;
+  sceneAnnouncement: SceneAnnouncement | null;
   backPage: BackPage;
   cloudConnected: boolean;
 }
@@ -489,6 +494,46 @@ const idleModePresentation = (
   };
 };
 
+const sceneAnnouncementPresentation = (
+  announcement: SceneAnnouncement,
+  dark: boolean,
+): FrontPresentation => {
+  const goodNight = announcement.label === "GOOD NIGHT";
+  const accent = goodNight ? COLORS.violet : COLORS.amber;
+  const accentDark = goodNight ? COLORS.violetDark : COLORS.amberDark;
+  const sweepWidth = [18, 44, 72][announcement.phase] ?? 72;
+  const checkSegments: readonly (readonly [number, number])[] = [
+    [5, 8],
+    [7, 10],
+    [9, 8],
+    [11, 6],
+    [13, 4],
+  ];
+  const visibleSegments = announcement.phase === 0 ? 1 : announcement.phase === 1 ? 3 : 5;
+  return {
+    elements: [
+      frontBackground(
+        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.slateDark, accentDark],
+      ),
+      frontRectangle("front-scene-sweep", 0, 0, sweepWidth, 16, accentDark),
+      ...checkSegments
+        .slice(0, visibleSegments)
+        .map(([x, y], index) =>
+          frontRectangle(`front-scene-check-${index}`, x, y, 3, 2, accent),
+        ),
+      frontText("front-scene-title", "SCENE", 45, 1, "tiny", COLORS.ice, "top_mid"),
+      frontText(
+        "front-scene-value",
+        announcement.label,
+        45,
+        10,
+        announcement.label.length > 7 ? "condensed" : "large",
+        COLORS.white,
+      ),
+    ],
+  };
+};
+
 const summaryPresentation = (
   frame: Extract<FrontFrame, "callsToday" | "messagesToday" | "callsTotal" | "messagesTotal">,
   summary: MonitorSummary | null,
@@ -809,6 +854,9 @@ const idlePresentation = (
   nowMs: number,
 ): FrontPresentation => {
   const dark = state.weather?.sunState === "below_horizon";
+  if (state.sceneAnnouncement) {
+    return sceneAnnouncementPresentation(state.sceneAnnouncement, dark);
+  }
   if (state.idleModeAnnouncement) {
     return idleModePresentation(state.idleModeAnnouncement, dark);
   }

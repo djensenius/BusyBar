@@ -68,7 +68,8 @@ warnings continue to override the selected idle mode.
 The Start/Pause button and dial press can activate Home Assistant scenes with
 `BUSY_BAR_START_SCENE_ID` and `BUSY_BAR_DIAL_SCENE_ID`. Both trigger only on
 the initial button press; dial rotation continues to select the idle display
-mode.
+mode. A successful scene activation plays a short color-sweep confirmation on
+the front display.
 
 ### Updating an existing Portainer stack
 
