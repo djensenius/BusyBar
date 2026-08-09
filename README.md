@@ -52,6 +52,8 @@ Create a stack from [`compose.yaml`](compose.yaml), then define:
 | `BUSY_BAR_BOOTH_ID`             | Usually `booth-01`                         |
 | `BUSY_BAR_LOCAL_URL`            | Optional LAN URL for physical input events |
 | `BUSY_BAR_LOCAL_ACCESS_KEY`     | Password for the BUSY Bar LAN API          |
+| `BUSY_BAR_START_SCENE_ID`       | Scene for Start/Pause, such as `scene.comfy` |
+| `BUSY_BAR_DIAL_SCENE_ID`        | Scene for dial press, such as `scene.good_night` |
 | `BUSY_BAR_WEATHER_ENABLED`      | Set `true` to add Home Assistant weather   |
 | `BUSY_BAR_HOME_ASSISTANT_URL`   | Home Assistant origin                      |
 | `BUSY_BAR_HOME_ASSISTANT_TOKEN` | Home Assistant long-lived access token    |
