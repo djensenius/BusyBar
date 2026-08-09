@@ -67,6 +67,8 @@ describe("Operator REST client", () => {
       response({
         callsToday: 12,
         messagesToday: 8,
+        callsTotal: 120,
+        messagesTotal: 80,
         dayStartedAt: "2026-08-08T04:00:00.000Z",
         generatedAt: "2026-08-08T19:00:00.000Z",
         timeZone: "America/Toronto",
@@ -76,7 +78,12 @@ describe("Operator REST client", () => {
 
     await expect(
       readSummary("https://operator.example.com", "token", "America/Toronto"),
-    ).resolves.toMatchObject({ callsToday: 12, messagesToday: 8 });
+    ).resolves.toMatchObject({
+      callsToday: 12,
+      messagesToday: 8,
+      callsTotal: 120,
+      messagesTotal: 80,
+    });
     expect(fetchMock.mock.calls[0]?.[0].toString()).toBe(
       "https://operator.example.com/v1/monitor/summary?timeZone=America%2FToronto",
     );

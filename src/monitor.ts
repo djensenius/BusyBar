@@ -5,21 +5,36 @@ import type { MonitorConfig } from "./config.js";
 import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream.js";
 import { startBusyBarInputStream } from "./input-stream.js";
 import type { BackPage, MonitorState } from "./renderer.js";
-import { renderMonitor } from "./renderer.js";
+import { availableFrontFrames, renderMonitor } from "./renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
+import type { WeatherSnapshot } from "./weather-client.js";
 
 const nextPage = (page: BackPage, direction: number): BackPage =>
   ((((page + direction) % 3) + 3) % 3) as BackPage;
 
 const nextFrontFrame = (
   current: MonitorState["frontFrame"],
-  hasSummary: boolean,
+  frames: readonly MonitorState["frontFrame"][],
 ): MonitorState["frontFrame"] => {
-  const frames: readonly MonitorState["frontFrame"][] = hasSummary
-    ? ["state", "calls", "messages", "health"]
-    : ["state", "health"];
   const index = frames.indexOf(current);
-  return frames[(index + 1) % frames.length] ?? "state";
+  return frames[(index + 1) % frames.length] ?? frames[0] ?? "callsToday";
+};
+
+export const desiredDisplayBrightness = (
+  weather: WeatherSnapshot | null,
+  timeZone: string,
+  lateNightBrightness: number,
+  nowMs = Date.now(),
+): number | "auto" => {
+  if (weather?.sunState !== "below_horizon") return "auto";
+  const hour = Number(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(nowMs)),
+  );
+  return hour >= 23 || hour < 12 ? lateNightBrightness : "auto";
 };
 
 export class Monitor {
@@ -31,7 +46,9 @@ export class Monitor {
     system: null,
     systemReceivedAtMs: null,
     summary: null,
-    frontFrame: "state",
+    weather: null,
+    weatherReceivedAtMs: null,
+    frontFrame: "callsToday",
     backPage: 0,
     cloudConnected: false,
   };
@@ -61,6 +78,9 @@ export class Monitor {
   #systemSourceAtMs: number | null = null;
   #systemSourceSignature: string | null = null;
   #summarySourceAtMs: number | null = null;
+  #brightnessValue: number | "auto" | null = null;
+  #brightnessUpdating = false;
+  #brightnessQueued = false;
 
   constructor(config: Extract<MonitorConfig, { enabled: true }>, client: BusyBarDeviceClient) {
     this.#config = config;
@@ -69,6 +89,8 @@ export class Monitor {
 
   async start(): Promise<void> {
     const deviceId = await this.#client.resolveDeviceId();
+    if (this.#stopped) return;
+    await this.#client.clear(this.#config.applicationName);
     if (this.#stopped) return;
     if (deviceId) {
       this.#inputStream = startBusyBarInputStream({
@@ -88,13 +110,17 @@ export class Monitor {
     }
 
     this.#started = true;
-    this.#freshnessTimer = setInterval(() => this.#scheduleRender(), 5_000);
+    this.#freshnessTimer = setInterval(() => {
+      this.#scheduleRender();
+      this.#scheduleBrightness();
+    }, 5_000);
     this.#freshnessTimer.unref();
     this.#rotationTimer = setInterval(() => {
       if (this.#state.status?.state !== "idle") return;
+      const frames = availableFrontFrames(this.#state, this.#config, Date.now());
       this.#state = {
         ...this.#state,
-        frontFrame: nextFrontFrame(this.#state.frontFrame, this.#state.summary !== null),
+        frontFrame: nextFrontFrame(this.#state.frontFrame, frames),
       };
       this.#scheduleRender();
     }, this.#config.frontRotationMs);
@@ -137,7 +163,7 @@ export class Monitor {
         }
       }
     }
-    const wasActive = this.#state.status?.state !== "idle";
+    const wasActive = this.#state.status !== null && this.#state.status.state !== "idle";
     const cappedReceivedAtMs = Math.min(receivedAtMs, Date.now());
     this.#statusSourceAtMs = sourceAtMs;
     this.#statusSourceId = sourceId;
@@ -147,7 +173,7 @@ export class Monitor {
       ...this.#state,
       status,
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
-      frontFrame: status.state !== "idle" || wasActive ? "state" : this.#state.frontFrame,
+      frontFrame: status.state === "idle" && wasActive ? "callsToday" : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -173,7 +199,7 @@ export class Monitor {
       ...this.#state,
       system,
       systemReceivedAtMs: Math.min(receivedAtMs, Date.now()),
-      frontFrame: recovered ? "state" : this.#state.frontFrame,
+      frontFrame: recovered ? "callsToday" : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -188,6 +214,45 @@ export class Monitor {
     this.#summarySourceAtMs = sourceAtMs;
     this.#state = { ...this.#state, summary };
     this.#scheduleRender();
+  }
+
+  updateWeather(weather: WeatherSnapshot, receivedAtMs = Date.now()): void {
+    this.#state = {
+      ...this.#state,
+      weather,
+      weatherReceivedAtMs: Math.min(receivedAtMs, Date.now()),
+    };
+    this.#scheduleBrightness();
+    this.#scheduleRender();
+  }
+
+  #scheduleBrightness(): void {
+    if (!this.#started || this.#stopped) return;
+    if (this.#brightnessUpdating) {
+      this.#brightnessQueued = true;
+      return;
+    }
+    const desired = desiredDisplayBrightness(
+      this.#state.weather,
+      this.#config.timeZone,
+      this.#config.lateNightBrightness,
+    );
+    if (desired === this.#brightnessValue) return;
+    this.#brightnessUpdating = true;
+    void this.#client
+      .setBrightness(desired)
+      .then(() => {
+        this.#brightnessValue = desired;
+      })
+      .catch((error: unknown) => {
+        log.warn({ err: error, desired }, "BUSY Bar brightness update failed");
+      })
+      .finally(() => {
+        this.#brightnessUpdating = false;
+        if (!this.#brightnessQueued) return;
+        this.#brightnessQueued = false;
+        this.#scheduleBrightness();
+      });
   }
 
   #handleInput(event: BusyBarInputEvent): void {
@@ -243,7 +308,7 @@ export class Monitor {
       this.#retryTimer = null;
       await this.#maybeAlert(rendered.alertKind);
       if (wasDisconnected) {
-        this.#state = { ...this.#state, frontFrame: "state" };
+        this.#state = { ...this.#state, frontFrame: "callsToday" };
         this.#scheduleRender();
       }
     } catch (error) {

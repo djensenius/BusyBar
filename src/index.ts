@@ -7,6 +7,7 @@ import {
   startOperatorStream,
   startSummaryPolling,
 } from "./operator-client.js";
+import { startHomeAssistantWeatherPolling } from "./weather-client.js";
 
 const waitWhileDisabled = (): Promise<void> =>
   new Promise((resolve) => {
@@ -51,6 +52,9 @@ export const start = async (): Promise<void> => {
     config.summaryPollIntervalMs,
     monitor,
   );
+  const weatherPolling = config.weather
+    ? startHomeAssistantWeatherPolling(config.weather, monitor)
+    : null;
 
   let stopping = false;
   const shutdown = (): void => {
@@ -59,6 +63,7 @@ export const start = async (): Promise<void> => {
     stream.stop();
     polling.stop();
     summaryPolling.stop();
+    weatherPolling?.stop();
     void monitor.stop().finally(() => {
       process.exitCode = 0;
     });

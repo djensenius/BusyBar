@@ -2,8 +2,9 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { BusyBarDeviceClient } from "../src/busy-client.js";
 import type { MonitorConfig } from "../src/config.js";
-import { Monitor } from "../src/monitor.js";
+import { desiredDisplayBrightness, Monitor } from "../src/monitor.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
+import type { WeatherSnapshot } from "../src/weather-client.js";
 
 const config: Extract<MonitorConfig, { enabled: true }> = {
   enabled: true,
@@ -20,6 +21,9 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   frontRotationMs: 8_000,
   summaryPollIntervalMs: 30_000,
   timeZone: "America/Toronto",
+  clockEnabled: true,
+  lateNightBrightness: 5,
+  weather: null,
   audioEnabled: false,
   alertSound: null,
   alertCooldownMs: 300_000,
@@ -48,6 +52,8 @@ const system = (): BoothSystemSnapshotEnvelope => ({
 const summary = (): MonitorSummary => ({
   callsToday: 12,
   messagesToday: 8,
+  callsTotal: 342,
+  messagesTotal: 187,
   dayStartedAt: "2026-07-31T04:00:00.000Z",
   generatedAt: new Date().toISOString(),
   timeZone: "America/Toronto",
@@ -56,19 +62,34 @@ const summary = (): MonitorSummary => ({
 const createClient = (): BusyBarDeviceClient & {
   draw: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
+  setBrightness: ReturnType<typeof vi.fn>;
 } => ({
   resolveDeviceId: vi.fn(() => Promise.resolve(null)),
   draw: vi.fn(() => Promise.resolve()),
   clear: vi.fn(() => Promise.resolve()),
+  setBrightness: vi.fn(() => Promise.resolve()),
   playStockSound: vi.fn(() => Promise.resolve()),
 });
 
-const frontText = (payload: DisplayDrawParams): string | undefined => {
-  const element = payload.elements.find(
-    (candidate) => candidate.display === "front" && "text" in candidate,
+const weather = (sunState: WeatherSnapshot["sunState"]): WeatherSnapshot => ({
+  condition: "clear-night",
+  sunState,
+  temperatureCelsius: 20,
+  feelsLikeCelsius: 18,
+  precipitationProbability: 10,
+  precipitationKind: "rain",
+  highCelsius: 24,
+  lowCelsius: 16,
+  humidityPercent: 60,
+  observedAt: new Date().toISOString(),
+});
+
+const frontTexts = (payload: DisplayDrawParams): string[] =>
+  payload.elements.flatMap((element) =>
+    element.display === "front" && "text" in element && element.text.length > 0
+      ? [element.text]
+      : [],
   );
-  return element && "text" in element ? element.text : undefined;
-};
 
 describe("monitor lifecycle", () => {
   beforeEach(() => {
@@ -84,16 +105,26 @@ describe("monitor lifecycle", () => {
     const monitor = new Monitor(config, client);
     monitor.updateStatus(status("idle"));
     monitor.updateSystem(system());
+    monitor.updateSummary(summary());
     await monitor.start();
     monitor.updateStatus({ ...status("recording"), id: 2 });
 
     await vi.advanceTimersByTimeAsync(250);
 
-    expect(frontText(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toBe("RECORDING");
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RECORDING",
+    ]);
+    monitor.updateStatus({ ...status("idle"), id: 3 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "CALLS",
+      "DAY",
+      "12",
+    ]);
     await monitor.stop();
   });
 
-  it("rotates through daily counters while idle", async () => {
+  it("rotates through today and overall counters while idle", async () => {
     const client = createClient();
     const monitor = new Monitor(config, client);
     monitor.updateStatus(status("idle"));
@@ -102,9 +133,23 @@ describe("monitor lifecycle", () => {
     await monitor.start();
 
     await vi.advanceTimersByTimeAsync(250);
-    expect(frontText(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toBe("READY");
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "CALLS",
+      "DAY",
+      "12",
+    ]);
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
-    expect(frontText(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toBe("CALLS 12");
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "MSGS",
+      "DAY",
+      "8",
+    ]);
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "CALLS",
+      "ALL",
+      "342",
+    ]);
     await monitor.stop();
   });
 
@@ -122,11 +167,17 @@ describe("monitor lifecycle", () => {
 
     monitor.updateStatus(first);
     await vi.advanceTimersByTimeAsync(5_250);
-    expect(frontText(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toBe("OFFLINE");
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "OFFLINE",
+    ]);
 
     monitor.updateStatus({ ...first, repeatCount: 2 });
     await vi.advanceTimersByTimeAsync(250);
-    expect(frontText(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toBe("READY");
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "CALLS",
+      "ALL",
+      "--",
+    ]);
     await monitor.stop();
   });
 
@@ -138,5 +189,32 @@ describe("monitor lifecycle", () => {
     await expect(monitor.start()).rejects.toThrow("cloud unavailable");
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("uses 5% hardware brightness from 23:00 until sunrise", async () => {
+    expect(
+      desiredDisplayBrightness(
+        weather("below_horizon"),
+        "America/Toronto",
+        5,
+        Date.parse("2026-08-09T03:05:00.000Z"),
+      ),
+    ).toBe(5);
+    expect(
+      desiredDisplayBrightness(
+        weather("below_horizon"),
+        "America/Toronto",
+        5,
+        Date.parse("2026-08-08T22:00:00.000Z"),
+      ),
+    ).toBe("auto");
+    expect(
+      desiredDisplayBrightness(
+        weather("above_horizon"),
+        "America/Toronto",
+        5,
+        Date.parse("2026-08-09T10:00:00.000Z"),
+      ),
+    ).toBe("auto");
   });
 });

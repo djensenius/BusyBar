@@ -6,6 +6,7 @@ export interface BusyBarDeviceClient {
   resolveDeviceId(): Promise<string | null>;
   draw(payload: DisplayDrawParams): Promise<void>;
   clear(applicationName: string): Promise<void>;
+  setBrightness(value: number | "auto"): Promise<void>;
   playStockSound(applicationName: string, stockPath: string): Promise<void>;
 }
 
@@ -22,6 +23,9 @@ export const createBusyBarDeviceClient = (
     },
     async clear(applicationName: string): Promise<void> {
       await bar.DisplayClear({ application_name: applicationName });
+    },
+    async setBrightness(value: number | "auto"): Promise<void> {
+      await bar.DisplayBrightnessSet({ value });
     },
     async playStockSound(applicationName: string, stockPath: string): Promise<void> {
       await bar.AudioPlay({ application_name: applicationName, stock_path: stockPath });

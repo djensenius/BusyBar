@@ -33,7 +33,38 @@ describe("monitor configuration", () => {
       systemStaleAfterMs: 20_000,
       summaryPollIntervalMs: 30_000,
       timeZone: "America/Toronto",
+      clockEnabled: true,
+      lateNightBrightness: 5,
+      weather: null,
       audioEnabled: false,
+    });
+  });
+
+  it("configures optional Home Assistant weather", () => {
+    expect(
+      resolveConfig({
+        ...base,
+        BUSY_BAR_WEATHER_ENABLED: "true",
+        BUSY_BAR_HOME_ASSISTANT_URL: "https://homeassistant.example.com",
+        BUSY_BAR_HOME_ASSISTANT_TOKEN: "ha-token",
+        BUSY_BAR_WEATHER_ENTITY_ID: "weather.patio",
+        BUSY_BAR_WEATHER_HUMIDEX_ENTITY_ID: "sensor.patio_humidex",
+        BUSY_BAR_WEATHER_WIND_CHILL_ENTITY_ID: "sensor.patio_wind_chill",
+        BUSY_BAR_WEATHER_PRECIPITATION_ENTITY_ID: "sensor.patio_precipitation",
+      }),
+    ).toMatchObject({
+      weather: {
+        url: "https://homeassistant.example.com",
+        token: "ha-token",
+        entityId: "weather.patio",
+        sunEntityId: "sun.sun",
+        humidexEntityId: "sensor.patio_humidex",
+        windChillEntityId: "sensor.patio_wind_chill",
+        precipitationEntityId: "sensor.patio_precipitation",
+        pollIntervalMs: 600_000,
+        staleAfterMs: 3_600_000,
+        timeZone: "America/Toronto",
+      },
     });
   });
 
@@ -66,5 +97,17 @@ describe("monitor configuration", () => {
     expect(() => resolveConfig({ ...base, BUSY_BAR_AUDIO_ENABLED: "true" })).toThrow(
       "BUSY_BAR_ALERT_SOUND",
     );
+    expect(() => resolveConfig({ ...base, BUSY_BAR_WEATHER_ENABLED: "true" })).toThrow(
+      "BUSY_BAR_HOME_ASSISTANT_URL",
+    );
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_WEATHER_ENABLED: "true",
+        BUSY_BAR_HOME_ASSISTANT_URL: "https://homeassistant.example.com",
+        BUSY_BAR_HOME_ASSISTANT_TOKEN: "ha-token",
+        BUSY_BAR_WEATHER_ENTITY_ID: "sensor.not_weather",
+      }),
+    ).toThrow("BUSY_BAR_WEATHER_ENTITY_ID");
   });
 });
