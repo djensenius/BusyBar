@@ -96,13 +96,15 @@ describe("monitor renderer", () => {
   });
 
   it("uses a full-width gradient behind front text", () => {
-    expect(renderMonitor(model(), config, now).payload.elements[0]).toMatchObject({
+    const rendered = renderMonitor(model(), config, now);
+    expect(rendered.payload.elements[0]).toMatchObject({
       type: "rectangle",
       display: "front",
       width: 72,
       height: 16,
       fill: "gradient_h",
     });
+    expect(textsFor(rendered.payload, "back")).toContain("CALLS -- MSGS --");
   });
 
   it("pins active and critical states", () => {

@@ -3,11 +3,13 @@ services:
     image: ghcr.io/djensenius/telephone-booth-busy-bar:latest
     restart: unless-stopped
     init: true
+    deploy:
+      replicas: 1
     environment:
       NODE_ENV: production
       LOG_LEVEL: "${LOG_LEVEL:-info}"
 
-      BUSY_BAR_MONITOR_ENABLED: "true"
+      BUSY_BAR_MONITOR_ENABLED: "${BUSY_BAR_MONITOR_ENABLED:-true}"
       BUSY_BAR_CLOUD_TOKEN: "${BUSY_BAR_CLOUD_TOKEN:?Set BUSY_BAR_CLOUD_TOKEN}"
       BUSY_BAR_API_URL: "${BUSY_BAR_API_URL:-https://api.busy.app}"
       BUSY_BAR_CLOUD_WS_URL: "${BUSY_BAR_CLOUD_WS_URL:-wss://api.busy.app/api/v1/bars/ws}"

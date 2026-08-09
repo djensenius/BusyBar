@@ -227,7 +227,7 @@ const backLines = (state: MonitorState, nowMs: number): string[] => {
   if (state.backPage === 0) {
     const today = state.summary
       ? `CALLS ${state.summary.callsToday} MSGS ${state.summary.messagesToday}`
-      : "CALL";
+      : "CALLS -- MSGS --";
     return [
       today,
       `STATE ${status?.state ?? "--"}`,

@@ -295,7 +295,13 @@ export class Monitor {
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#inputStream?.stop();
     this.#stopPromise = (async () => {
-      if (this.#activeRender) await this.#activeRender;
+      if (this.#activeRender) {
+        try {
+          await this.#activeRender;
+        } catch (error) {
+          log.warn({ err: error }, "BUSY Bar active render did not finish cleanly");
+        }
+      }
       try {
         await this.#client.clear(this.#config.applicationName);
       } catch (error) {
