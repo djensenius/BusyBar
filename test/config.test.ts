@@ -36,6 +36,7 @@ describe("monitor configuration", () => {
       lateNightBrightness: 5,
       homeAssistant: null,
       startSceneId: null,
+      startToggleLightIds: [],
       dialSceneId: null,
       weather: null,
       audioEnabled: false,
@@ -49,6 +50,8 @@ describe("monitor configuration", () => {
         BUSY_BAR_HOME_ASSISTANT_URL: "https://homeassistant.example.com",
         BUSY_BAR_HOME_ASSISTANT_TOKEN: "ha-token",
         BUSY_BAR_START_SCENE_ID: "scene.comfy",
+        BUSY_BAR_START_TOGGLE_LIGHT_IDS:
+          "light.kitchen_island_lights, light.kitchen_main_lights",
         BUSY_BAR_DIAL_SCENE_ID: "scene.good_night",
       }),
     ).toMatchObject({
@@ -57,6 +60,7 @@ describe("monitor configuration", () => {
         token: "ha-token",
       },
       startSceneId: "scene.comfy",
+      startToggleLightIds: ["light.kitchen_island_lights", "light.kitchen_main_lights"],
       dialSceneId: "scene.good_night",
       weather: null,
     });
@@ -152,6 +156,21 @@ describe("monitor configuration", () => {
         BUSY_BAR_START_SCENE_ID: "light.comfy",
       }),
     ).toThrow("BUSY_BAR_START_SCENE_ID");
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_START_TOGGLE_LIGHT_IDS: "light.kitchen_main_lights",
+      }),
+    ).toThrow("requires BUSY_BAR_START_SCENE_ID");
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_HOME_ASSISTANT_URL: "https://homeassistant.example.com",
+        BUSY_BAR_HOME_ASSISTANT_TOKEN: "ha-token",
+        BUSY_BAR_START_SCENE_ID: "scene.comfy",
+        BUSY_BAR_START_TOGGLE_LIGHT_IDS: "switch.kitchen_main_lights",
+      }),
+    ).toThrow("BUSY_BAR_START_TOGGLE_LIGHT_IDS");
     expect(() =>
       resolveConfig({
         ...base,

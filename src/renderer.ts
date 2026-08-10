@@ -6,6 +6,7 @@ import {
 } from "./health.js";
 import type { SystemHealthSeverity } from "./health.js";
 import type { MonitorConfig } from "./config.js";
+import type { SceneStatus } from "./home-assistant-client.js";
 import {
   boothArtElements,
   degreeElement,
@@ -29,10 +30,15 @@ export type FrontFrame =
   | "clock"
   | "weather";
 export type IdleMode = "weather" | "clock" | "weatherClock" | "telephone" | "all";
-export type BackPage = 0 | 1 | 2;
+export type BackPage = 0 | 1 | 2 | 3;
 export interface SceneAnnouncement {
   label: string;
   phase: 0 | 1 | 2;
+}
+
+export interface SmartHomeAction {
+  sceneId: string;
+  result: "checking" | "activated" | "lightsOff" | "failed";
 }
 
 export interface MonitorState {
@@ -47,6 +53,8 @@ export interface MonitorState {
   idleMode: IdleMode;
   idleModeAnnouncement: IdleMode | null;
   sceneAnnouncement: SceneAnnouncement | null;
+  smartHomeStatus: SceneStatus | null;
+  smartHomeAction: SmartHomeAction | null;
   backPage: BackPage;
   cloudConnected: boolean;
 }
@@ -419,7 +427,90 @@ const percent = (used: number | null | undefined, total: number | null | undefin
     ? `${Math.round((used / total) * 100)}%`
     : "--";
 
-const backLines = (state: MonitorState, nowMs: number): string[] => {
+const sceneLabel = (entityId: string | null): string =>
+  entityId
+    ? entityId.replace(/^scene\./, "").replace(/_/g, " ").toUpperCase().slice(0, 18)
+    : "--";
+
+const brightnessLevel = (brightness: number | null): string =>
+  brightness === null ? "ON" : `${Math.round((brightness / 255) * 100)}%`;
+
+const currentLightLevel = (state: string, brightness: number | null): string => {
+  if (state === "off") return "OFF";
+  if (state !== "on") return "--";
+  return brightnessLevel(brightness);
+};
+
+const lightCode = (entityId: string): string => {
+  const words = entityId
+    .replace(/^light\./, "")
+    .split("_")
+    .filter((word) => word !== "main" && word !== "lights");
+  if (words.at(-1) === "room") return (words[0] ?? "LGT").slice(0, 3).toUpperCase();
+  return (words.at(-1) ?? "LGT").slice(0, 3).toUpperCase();
+};
+
+const smartHomeBackLines = (
+  state: MonitorState,
+  config: Extract<MonitorConfig, { enabled: true }>,
+): string[] => {
+  const status = state.smartHomeStatus;
+  const startLabel = sceneLabel(config.startSceneId);
+  const checkingStart =
+    state.smartHomeAction?.result === "checking" &&
+    state.smartHomeAction.sceneId === config.startSceneId;
+  const lightsOff = Boolean(
+    status && status.lights.length > 0 && status.lights.every((light) => light.currentState === "off"),
+  );
+  const statusLabel = checkingStart
+    ? "CHECKING"
+    : status?.matches
+      ? `${startLabel} ACTIVE`
+      : lightsOff
+        ? "LIGHTS OFF"
+        : status
+          ? `${startLabel} CHANGED`
+          : "--";
+  const targetLevels =
+    status?.lights
+      .map((light) => `${lightCode(light.entityId)}${brightnessLevel(light.sceneBrightness)}`)
+      .join(" ") ?? "--";
+  const currentLevels =
+    status?.lights
+      .map(
+        (light) =>
+          `${lightCode(light.entityId)}${currentLightLevel(
+            light.currentState,
+            light.currentBrightness,
+          )}`,
+      )
+      .join(" ") ?? "--";
+  const action = state.smartHomeAction;
+  const actionLabel = action
+    ? action.result === "checking"
+      ? `${sceneLabel(action.sceneId)} ...`
+      : action.result === "activated"
+        ? `${sceneLabel(action.sceneId)} ON`
+        : action.result === "lightsOff"
+          ? "LIGHTS OFF"
+          : `${sceneLabel(action.sceneId)} FAILED`
+    : "--";
+  return [
+    "SMART HOME",
+    `START ${startLabel}`,
+    `STATUS ${statusLabel}`,
+    `TARGET ${targetLevels}`,
+    `NOW ${currentLevels}`,
+    `DIAL ${sceneLabel(config.dialSceneId)}`,
+    `LAST ${actionLabel}`,
+  ];
+};
+
+const backLines = (
+  state: MonitorState,
+  config: Extract<MonitorConfig, { enabled: true }>,
+  nowMs: number,
+): string[] => {
   const status = state.status;
   const system = state.system;
   const snapshot = system?.snapshot;
@@ -450,16 +541,19 @@ const backLines = (state: MonitorState, nowMs: number): string[] => {
       `UP ${snapshot?.uptimeSeconds != null ? `${Math.floor(snapshot.uptimeSeconds / 60)}m` : "--"}`,
     ];
   }
-  const network = snapshot?.networks?.[0];
-  return [
-    "NETWORK",
-    `TAILSCALE ${snapshot?.tailscale?.connected == null ? "--" : snapshot.tailscale.connected ? "UP" : "DOWN"}`,
-    `HOST ${snapshot?.tailscale?.hostname ?? "--"}`,
-    `PEERS ${snapshot?.tailscale?.peerCount ?? "--"}`,
-    `IFACE ${network?.interface ?? "--"}`,
-    `TELEM ${system ? Math.round(ageMs(state.systemReceivedAtMs, nowMs) / 1000) : "--"}s`,
-    `BUSY CLOUD ${state.cloudConnected ? "UP" : "DOWN"}`,
-  ];
+  if (state.backPage === 2) {
+    const network = snapshot?.networks?.[0];
+    return [
+      "NETWORK",
+      `TAILSCALE ${snapshot?.tailscale?.connected == null ? "--" : snapshot.tailscale.connected ? "UP" : "DOWN"}`,
+      `HOST ${snapshot?.tailscale?.hostname ?? "--"}`,
+      `PEERS ${snapshot?.tailscale?.peerCount ?? "--"}`,
+      `IFACE ${network?.interface ?? "--"}`,
+      `TELEM ${system ? Math.round(ageMs(state.systemReceivedAtMs, nowMs) / 1000) : "--"}s`,
+      `BUSY CLOUD ${state.cloudConnected ? "UP" : "DOWN"}`,
+    ];
+  }
+  return smartHomeBackLines(state, config);
 };
 
 const compactCount = (count: number): string => (count > 999 ? "999+" : String(count));
@@ -967,7 +1061,7 @@ export const renderMonitor = (
       ? statePresentation(boothState)
       : (health.view ?? idlePresentation(state, config, nowMs));
   const frontElements = stableFrontElements(frontView.elements);
-  const lines = backLines(state, nowMs);
+  const lines = backLines(state, config, nowMs);
   const backElements = Array.from({ length: 7 }, (_, index) =>
     backText(
       `back-line-${index}`,

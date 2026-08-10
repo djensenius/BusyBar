@@ -2,10 +2,13 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { BusyBarDeviceClient } from "../src/busy-client.js";
 import type { MonitorConfig } from "../src/config.js";
+import type { HomeAssistantSceneClient, SceneStatus } from "../src/home-assistant-client.js";
 import {
   desiredDisplayBrightness,
   Monitor,
+  nextBackPage,
   nextIdleMode,
+  sceneActionForButton,
   sceneAnnouncementLabel,
   sceneIdForButton,
 } from "../src/monitor.js";
@@ -31,6 +34,7 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   lateNightBrightness: 5,
   homeAssistant: null,
   startSceneId: null,
+  startToggleLightIds: [],
   dialSceneId: null,
   weather: null,
   audioEnabled: false,
@@ -91,6 +95,19 @@ const weather = (sunState: WeatherSnapshot["sunState"]): WeatherSnapshot => ({
   humidityPercent: 60,
   observedAt: new Date().toISOString(),
 });
+
+const smartHomeStatus: SceneStatus = {
+  matches: true,
+  lights: [
+    {
+      entityId: "light.kitchen_island_lights",
+      currentState: "on",
+      currentBrightness: 45,
+      sceneBrightness: 45,
+      matches: true,
+    },
+  ],
+};
 
 const frontTexts = (payload: DisplayDrawParams): string[] =>
   payload.elements.flatMap((element) =>
@@ -199,6 +216,38 @@ describe("monitor lifecycle", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("refreshes Comfy light levels for the rear smart-home page", async () => {
+    const client = createClient();
+    const homeAssistant: HomeAssistantSceneClient = {
+      activateScene: vi.fn(() => Promise.resolve()),
+      getSceneLightStatus: vi.fn(() => Promise.resolve(smartHomeStatus)),
+      activateSceneOrTurnOffLights: vi.fn(() =>
+        Promise.resolve({ result: "activated" as const, status: smartHomeStatus }),
+      ),
+    };
+    const monitor = new Monitor(
+      {
+        ...config,
+        homeAssistant: {
+          url: "https://homeassistant.example.com",
+          token: "ha-token",
+        },
+        startSceneId: "scene.comfy",
+        startToggleLightIds: ["light.kitchen_island_lights"],
+      },
+      client,
+      homeAssistant,
+    );
+
+    await monitor.start();
+    expect(homeAssistant.getSceneLightStatus).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(homeAssistant.getSceneLightStatus).toHaveBeenCalledTimes(2);
+
+    await monitor.stop();
+  });
+
   it("uses 5% hardware brightness from 23:00 until sunrise", async () => {
     expect(
       desiredDisplayBrightness(
@@ -232,15 +281,38 @@ describe("monitor lifecycle", () => {
     expect(nextIdleMode("weather", -1)).toBe("all");
   });
 
+  it("cycles backward from the booth overview to the smart-home rear page", () => {
+    expect(nextBackPage(0, -1)).toBe(3);
+    expect(nextBackPage(3, -1)).toBe(2);
+    expect(nextBackPage(3, 1)).toBe(0);
+  });
+
   it("maps Start and dial press to configured Home Assistant scenes", () => {
     const smartHomeConfig = {
       ...config,
       startSceneId: "scene.comfy",
+      startToggleLightIds: [
+        "light.kitchen_island_lights",
+        "light.kitchen_main_lights",
+        "light.living_room_main_lights",
+      ],
       dialSceneId: "scene.good_night",
     };
     expect(sceneIdForButton(smartHomeConfig, "START")).toBe("scene.comfy");
     expect(sceneIdForButton(smartHomeConfig, "OK")).toBe("scene.good_night");
     expect(sceneIdForButton(smartHomeConfig, "BACK")).toBeNull();
+    expect(sceneActionForButton(smartHomeConfig, "START")).toEqual({
+      sceneId: "scene.comfy",
+      turnOffLightIds: [
+        "light.kitchen_island_lights",
+        "light.kitchen_main_lights",
+        "light.living_room_main_lights",
+      ],
+    });
+    expect(sceneActionForButton(smartHomeConfig, "OK")).toEqual({
+      sceneId: "scene.good_night",
+      turnOffLightIds: [],
+    });
     expect(sceneAnnouncementLabel("scene.good_night")).toBe("GOOD NIGHT");
   });
 });

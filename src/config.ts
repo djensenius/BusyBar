@@ -41,6 +41,7 @@ export type MonitorConfig =
       lateNightBrightness: number;
       homeAssistant: HomeAssistantConfig | null;
       startSceneId: string | null;
+      startToggleLightIds: string[];
       dialSceneId: string | null;
       weather: WeatherConfig | null;
       audioEnabled: boolean;
@@ -137,6 +138,21 @@ function entityId(
   return parsed;
 }
 
+const entityIds = (input: string | undefined, name: string, domain: string): string[] => {
+  const parsed = value(input);
+  if (!parsed) return [];
+  const ids = parsed.split(",").map((id) => id.trim());
+  if (
+    ids.some((id) => !id || !new RegExp(`^${domain}\\.[a-z0-9_]+$`).test(id)) ||
+    new Set(ids).size !== ids.length
+  ) {
+    throw new ConfigurationError(
+      `${name} must be a comma-separated list of unique ${domain} entity ids.`,
+    );
+  }
+  return ids;
+};
+
 export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConfig => {
   if (!boolean(env, "BUSY_BAR_MONITOR_ENABLED", true)) return { enabled: false };
   const token = value(env.BUSY_BAR_CLOUD_TOKEN);
@@ -176,6 +192,16 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
     "scene",
     false,
   );
+  const startToggleLightIds = entityIds(
+    env.BUSY_BAR_START_TOGGLE_LIGHT_IDS,
+    "BUSY_BAR_START_TOGGLE_LIGHT_IDS",
+    "light",
+  );
+  if (startToggleLightIds.length > 0 && !startSceneId) {
+    throw new ConfigurationError(
+      "BUSY_BAR_START_TOGGLE_LIGHT_IDS requires BUSY_BAR_START_SCENE_ID.",
+    );
+  }
   const dialSceneId = entityId(
     env.BUSY_BAR_DIAL_SCENE_ID,
     "BUSY_BAR_DIAL_SCENE_ID",
@@ -273,6 +299,7 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
     lateNightBrightness: integer(env, "BUSY_BAR_LATE_NIGHT_BRIGHTNESS", 5, 5, 100),
     homeAssistant,
     startSceneId,
+    startToggleLightIds,
     dialSceneId,
     weather,
     audioEnabled,
