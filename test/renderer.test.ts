@@ -28,6 +28,7 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   lateNightBrightness: 5,
   homeAssistant: null,
   startSceneId: null,
+  startToggleLightIds: [],
   dialSceneId: null,
   weather: null,
   audioEnabled: false,
@@ -51,6 +52,21 @@ const weatherEnabledConfig: Extract<MonitorConfig, { enabled: true }> = {
     staleAfterMs: 3_600_000,
     timeZone: "America/Toronto",
   },
+};
+
+const smartHomeConfig: Extract<MonitorConfig, { enabled: true }> = {
+  ...config,
+  homeAssistant: {
+    url: "https://homeassistant.example.com",
+    token: "ha-token",
+  },
+  startSceneId: "scene.comfy",
+  startToggleLightIds: [
+    "light.kitchen_island_lights",
+    "light.kitchen_main_lights",
+    "light.living_room_main_lights",
+  ],
+  dialSceneId: "scene.good_night",
 };
 
 const status = (state: BoothStatus["state"]): BoothStatus => ({
@@ -109,6 +125,8 @@ const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   idleMode: "all",
   idleModeAnnouncement: null,
   sceneAnnouncement: null,
+  smartHomeStatus: null,
+  smartHomeAction: null,
   backPage: 0,
   cloudConnected: true,
   ...overrides,
@@ -227,6 +245,70 @@ describe("monitor renderer", () => {
     expect(textsFor(first.payload, "front")).toEqual(["SCENE", "COMFY"]);
     expect(textsFor(final.payload, "front")).toEqual(["SCENE", "GOOD NIGHT"]);
     expect(frontFillColors(first.payload)).not.toEqual(frontFillColors(final.payload));
+  });
+
+  it("shows live scene levels and mappings on the smart-home rear page", () => {
+    const rendered = renderMonitor(
+      model({
+        backPage: 3,
+        smartHomeStatus: {
+          matches: true,
+          lights: [
+            {
+              entityId: "light.kitchen_island_lights",
+              currentState: "on",
+              currentBrightness: 45,
+              sceneBrightness: 45,
+              matches: true,
+            },
+            {
+              entityId: "light.kitchen_main_lights",
+              currentState: "on",
+              currentBrightness: 91,
+              sceneBrightness: 91,
+              matches: true,
+            },
+            {
+              entityId: "light.living_room_main_lights",
+              currentState: "on",
+              currentBrightness: 63,
+              sceneBrightness: 63,
+              matches: true,
+            },
+          ],
+        },
+        smartHomeAction: {
+          sceneId: "scene.comfy",
+          result: "activated",
+        },
+      }),
+      smartHomeConfig,
+      now,
+    );
+
+    expect(textsFor(rendered.payload, "back")).toEqual([
+      "SMART HOME",
+      "START COMFY",
+      "STATUS COMFY ACTIVE",
+      "TARGET ISL18% KIT36% LIV25%",
+      "NOW ISL18% KIT36% LIV25%",
+      "DIAL GOOD NIGHT",
+      "LAST COMFY ON",
+    ]);
+  });
+
+  it("keeps telephone-booth details on the rear overview", () => {
+    expect(
+      textsFor(renderMonitor(model({ summary }), smartHomeConfig, now).payload, "back"),
+    ).toEqual([
+      "CALLS 12 MSGS 8",
+      "STATE idle",
+      "AGE 1s",
+      "VIEW ALL",
+      "QUESTION --",
+      "MESSAGE --",
+      "ERROR CLEAR",
+    ]);
   });
 
   it("renders smart weather details and every Home Assistant condition", () => {

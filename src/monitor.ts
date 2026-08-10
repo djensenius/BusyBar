@@ -10,8 +10,12 @@ import { availableFrontFrames, renderMonitor } from "./renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
 import type { WeatherSnapshot } from "./weather-client.js";
 
-const nextPage = (page: BackPage, direction: number): BackPage =>
-  ((((page + direction) % 3) + 3) % 3) as BackPage;
+const BACK_PAGE_COUNT = 4;
+const SMART_HOME_POLL_INTERVAL_MS = 30_000;
+const SMART_HOME_BACK_DISPLAY_MS = 4_000;
+
+export const nextBackPage = (page: BackPage, direction: number): BackPage =>
+  ((((page + direction) % BACK_PAGE_COUNT) + BACK_PAGE_COUNT) % BACK_PAGE_COUNT) as BackPage;
 
 const nextFrontFrame = (
   current: MonitorState["frontFrame"],
@@ -46,6 +50,23 @@ export const sceneIdForButton = (
   if (button === "START") return config.startSceneId;
   if (button === "OK") return config.dialSceneId;
   return null;
+};
+
+export interface SceneButtonAction {
+  sceneId: string;
+  turnOffLightIds: readonly string[];
+}
+
+export const sceneActionForButton = (
+  config: Extract<MonitorConfig, { enabled: true }>,
+  button: BusyBarButton,
+): SceneButtonAction | null => {
+  const sceneId = sceneIdForButton(config, button);
+  if (!sceneId) return null;
+  return {
+    sceneId,
+    turnOffLightIds: button === "START" ? config.startToggleLightIds : [],
+  };
 };
 
 export const sceneAnnouncementLabel = (entityId: string): string =>
@@ -88,6 +109,8 @@ export class Monitor {
     idleMode: "all",
     idleModeAnnouncement: null,
     sceneAnnouncement: null,
+    smartHomeStatus: null,
+    smartHomeAction: null,
     backPage: 0,
     cloudConnected: false,
   };
@@ -122,6 +145,12 @@ export class Monitor {
   #brightnessQueued = false;
   #idleModeAnnouncementTimer: NodeJS.Timeout | null = null;
   #sceneAnnouncementTimer: NodeJS.Timeout | null = null;
+  #smartHomePollTimer: NodeJS.Timeout | null = null;
+  #backPageRestoreTimer: NodeJS.Timeout | null = null;
+  #backPageBeforeSmartHome: BackPage | null = null;
+  #smartHomeActionPending = false;
+  #smartHomeRefreshing = false;
+  #smartHomeRefreshQueued = false;
 
   constructor(
     config: Extract<MonitorConfig, { enabled: true }>,
@@ -174,6 +203,13 @@ export class Monitor {
     }, this.#config.frontRotationMs);
     this.#rotationTimer.unref();
     this.#state = { ...this.#state, cloudConnected: true };
+    if (this.#config.startSceneId && this.#config.startToggleLightIds.length > 0) {
+      this.#refreshSmartHomeStatus();
+      this.#smartHomePollTimer = setInterval(() => {
+        this.#refreshSmartHomeStatus();
+      }, SMART_HOME_POLL_INTERVAL_MS);
+      this.#smartHomePollTimer.unref();
+    }
     this.#scheduleRender();
     log.info("BUSY Bar monitor started");
   }
@@ -303,29 +339,166 @@ export class Monitor {
       });
   }
 
+  #refreshSmartHomeStatus(): void {
+    const sceneId = this.#config.startSceneId;
+    const lightEntityIds = this.#config.startToggleLightIds;
+    if (
+      !this.#started ||
+      this.#stopped ||
+      !this.#homeAssistant ||
+      !sceneId ||
+      lightEntityIds.length === 0
+    ) {
+      return;
+    }
+    if (this.#smartHomeActionPending || this.#smartHomeRefreshing) {
+      this.#smartHomeRefreshQueued = true;
+      return;
+    }
+    this.#smartHomeRefreshing = true;
+    void this.#homeAssistant
+      .getSceneLightStatus(sceneId, lightEntityIds)
+      .then((status) => {
+        if (this.#stopped) return;
+        if (this.#smartHomeActionPending) {
+          this.#smartHomeRefreshQueued = true;
+          return;
+        }
+        this.#state = {
+          ...this.#state,
+          smartHomeStatus: status,
+        };
+        this.#scheduleRender();
+      })
+      .catch((error: unknown) => {
+        log.warn({ err: error, sceneId }, "BUSY Bar smart-home status refresh failed");
+      })
+      .finally(() => {
+        this.#smartHomeRefreshing = false;
+        if (!this.#smartHomeRefreshQueued || this.#smartHomeActionPending) return;
+        this.#smartHomeRefreshQueued = false;
+        this.#refreshSmartHomeStatus();
+      });
+  }
+
+  #showSmartHomeBackPage(): void {
+    if (this.#state.backPage !== 3 && this.#backPageBeforeSmartHome === null) {
+      this.#backPageBeforeSmartHome = this.#state.backPage;
+    }
+    if (this.#backPageRestoreTimer) clearTimeout(this.#backPageRestoreTimer);
+    this.#backPageRestoreTimer = null;
+    this.#state = { ...this.#state, backPage: 3 };
+    this.#scheduleRender();
+  }
+
+  #scheduleBackPageRestore(): void {
+    if (this.#backPageBeforeSmartHome === null) return;
+    if (this.#backPageRestoreTimer) clearTimeout(this.#backPageRestoreTimer);
+    this.#backPageRestoreTimer = setTimeout(() => {
+      const backPage = this.#backPageBeforeSmartHome;
+      this.#backPageRestoreTimer = null;
+      this.#backPageBeforeSmartHome = null;
+      if (backPage === null || this.#stopped) return;
+      this.#state = { ...this.#state, backPage };
+      this.#scheduleRender();
+    }, SMART_HOME_BACK_DISPLAY_MS);
+    this.#backPageRestoreTimer.unref();
+  }
+
+  #cancelBackPageRestore(): void {
+    if (this.#backPageRestoreTimer) clearTimeout(this.#backPageRestoreTimer);
+    this.#backPageRestoreTimer = null;
+    this.#backPageBeforeSmartHome = null;
+  }
+
   #handleInput(event: BusyBarInputEvent): void {
     if (event.kind === "switch") return;
     if (event.kind === "button") {
       if (event.action !== "PRESS") return;
-      const sceneId = sceneIdForButton(this.#config, event.button);
-      if (sceneId && this.#homeAssistant) {
-        void this.#homeAssistant
-          .activateScene(sceneId)
-          .then(() => {
-            log.info({ button: event.button, sceneId }, "BUSY Bar smart-home scene activated");
-            this.#showSceneAnnouncement(sceneId);
+      const sceneAction = sceneActionForButton(this.#config, event.button);
+      if (sceneAction && this.#homeAssistant) {
+        if (this.#smartHomeActionPending) {
+          log.debug({ button: event.button }, "BUSY Bar smart-home action already in progress");
+          return;
+        }
+        this.#smartHomeActionPending = true;
+        this.#state = {
+          ...this.#state,
+          smartHomeAction: {
+            sceneId: sceneAction.sceneId,
+            result: "checking",
+          },
+        };
+        this.#showSmartHomeBackPage();
+        const action =
+          sceneAction.turnOffLightIds.length > 0
+            ? this.#homeAssistant.activateSceneOrTurnOffLights(
+                sceneAction.sceneId,
+                sceneAction.turnOffLightIds,
+              )
+            : this.#homeAssistant.activateScene(sceneAction.sceneId).then(() => ({
+                result: "activated" as const,
+                status: null,
+              }));
+        void action
+          .then(({ result, status }) => {
+            if (this.#stopped) return;
+            this.#state = {
+              ...this.#state,
+              ...(status
+                ? {
+                    smartHomeStatus: status,
+                  }
+                : {}),
+              smartHomeAction: {
+                sceneId: sceneAction.sceneId,
+                result,
+              },
+            };
+            log.info(
+              { button: event.button, sceneId: sceneAction.sceneId, result },
+              "BUSY Bar smart-home scene action completed",
+            );
+            this.#showSceneAnnouncement(
+              result === "lightsOff"
+                ? "LIGHTS OFF"
+                : sceneAnnouncementLabel(sceneAction.sceneId),
+            );
+            if (status) this.#smartHomeRefreshQueued = true;
+            this.#scheduleBackPageRestore();
+            this.#scheduleRender();
           })
           .catch((error: unknown) => {
+            if (this.#stopped) return;
+            this.#state = {
+              ...this.#state,
+              smartHomeAction: {
+                sceneId: sceneAction.sceneId,
+                result: "failed",
+              },
+            };
             log.warn(
-              { err: error, button: event.button, sceneId },
-              "BUSY Bar smart-home scene activation failed",
+              { err: error, button: event.button, sceneId: sceneAction.sceneId },
+              "BUSY Bar smart-home scene action failed",
             );
+            this.#scheduleBackPageRestore();
+            this.#scheduleRender();
+          })
+          .finally(() => {
+            this.#smartHomeActionPending = false;
+            if (!this.#smartHomeRefreshQueued) return;
+            this.#smartHomeRefreshQueued = false;
+            this.#refreshSmartHomeStatus();
           });
         return;
       }
+      this.#cancelBackPageRestore();
       this.#state = {
         ...this.#state,
-        backPage: event.button === "BACK" ? 0 : nextPage(this.#state.backPage, 1),
+        backPage:
+          event.button === "BACK"
+            ? nextBackPage(this.#state.backPage, -1)
+            : nextBackPage(this.#state.backPage, 1),
       };
     } else {
       const idleMode = nextIdleMode(this.#state.idleMode, event.delta);
@@ -348,9 +521,8 @@ export class Monitor {
     this.#scheduleRender();
   }
 
-  #showSceneAnnouncement(sceneId: string): void {
+  #showSceneAnnouncement(label: string): void {
     if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
-    const label = sceneAnnouncementLabel(sceneId);
     const showPhase = (phase: SceneAnnouncement["phase"]): void => {
       this.#state = {
         ...this.#state,
@@ -463,9 +635,11 @@ export class Monitor {
     if (this.#renderTimer) clearTimeout(this.#renderTimer);
     if (this.#freshnessTimer) clearInterval(this.#freshnessTimer);
     if (this.#rotationTimer) clearInterval(this.#rotationTimer);
+    if (this.#smartHomePollTimer) clearInterval(this.#smartHomePollTimer);
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
     if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
+    if (this.#backPageRestoreTimer) clearTimeout(this.#backPageRestoreTimer);
     this.#inputStream?.stop();
     this.#stopPromise = (async () => {
       if (this.#activeRender) {

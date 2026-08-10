@@ -37,6 +37,15 @@ Weather uses condition-specific artwork for every Home Assistant weather state.
 Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
 
+## Rear display
+
+The rear display keeps the existing booth overview, system, and network pages,
+and adds a `SMART HOME` page. It shows the Start and dial scene mappings,
+whether the configured lights currently match Comfy, the target and current
+brightness levels, and the last smart-home action. A scene button temporarily
+opens this page for four seconds, then returns to the previous page. Press Back
+to cycle backward through all four rear pages.
+
 ## Requirements
 
 - A BUSY Bar linked to BUSY Cloud
@@ -64,6 +73,7 @@ Create a stack from [`compose.yaml`](compose.yaml), then define:
 | `BUSY_BAR_WEATHER_ENABLED`      | Set `true` to add Home Assistant weather   |
 | `BUSY_BAR_HOME_ASSISTANT_URL`   | Home Assistant origin                      |
 | `BUSY_BAR_HOME_ASSISTANT_TOKEN` | Home Assistant long-lived access token    |
+| `BUSY_BAR_START_TOGGLE_LIGHT_IDS` | Optional comma-separated lights turned off by a second Start/Pause press |
 
 Deploy exactly one replica. The container exposes no ports.
 
@@ -78,7 +88,13 @@ The Start/Pause button and dial press can activate Home Assistant scenes with
 `BUSY_BAR_START_SCENE_ID` and `BUSY_BAR_DIAL_SCENE_ID`. Both trigger only on
 the initial button press; dial rotation continues to select the idle display
 mode. A successful scene activation plays a short color-sweep confirmation on
-the front display.
+the front display. When `BUSY_BAR_START_TOGGLE_LIGHT_IDS` is configured, the
+Start/Pause button compares those lights with the on state and brightness saved
+in the scene. If every light matches, it turns only those lights off and
+displays `LIGHTS OFF`; otherwise it activates the configured scene. For Comfy, use
+`light.kitchen_island_lights,light.kitchen_main_lights,light.living_room_main_lights`
+to make a second press turn off the overhead lighting while leaving the lamps
+on.
 
 ### Updating an existing Portainer stack
 
