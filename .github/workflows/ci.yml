@@ -12,7 +12,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  checks:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: typecheck
+            script: typecheck
+          - name: lint
+            script: lint
+          - name: test
+            script: test
+          - name: build
+            script: build
+          - name: demo
+            script: demo:check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -22,9 +37,10 @@ jobs:
           cache: true
           run-install: false
       - run: vp install --frozen-lockfile
-      - run: vp run typecheck
-      - run: vp run lint
-      - run: vp run test
-      - run: vp run build
-      - run: vp run demo:check
+      - run: vp run ${{ matrix.script }}
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
       - run: docker build --tag busybar:test .
