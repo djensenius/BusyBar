@@ -10,6 +10,13 @@ health through BUSY Cloud.
 The service is deliberately independent of the Operator deployment. Run one
 instance on an always-on home server, Portainer host, or cloud container.
 
+## Display demo
+
+Open the [interactive BusyBar display demo](https://djensenius.github.io/BusyBar/)
+to preview the idle carousel, live clock layout, smart weather details, active
+states, and warnings. The self-contained GitHub Pages source lives in
+[`demo/`](demo/).
+
 ## Front display
 
 While the booth is healthy and idle, the front rotates through full-width
@@ -19,7 +26,7 @@ gradient cards:
 - `MSGS / DAY / n`
 - `CALLS / ALL / n`
 - `MSGS / ALL / n`
-- A 24-hour local clock
+- A 24-hour local clock with a weekday/date card
 - Current weather, when Home Assistant weather is configured
 
 Call activity interrupts the carousel immediately with `CALLING`, `PLAYING`,

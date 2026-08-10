@@ -26,4 +26,5 @@ jobs:
       - run: vp run lint
       - run: vp run test
       - run: vp run build
+      - run: vp run demo:check
       - run: docker build --tag busybar:test .

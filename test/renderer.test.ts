@@ -169,7 +169,7 @@ describe("monitor renderer", () => {
   it("renders a 24-hour clock", () => {
     expect(
       textsFor(renderMonitor(model({ frontFrame: "clock" }), config, now).payload, "front"),
-    ).toEqual(["JUL 31", "16:00"]);
+    ).toEqual(["16:00", "FRI", "JUL 31"]);
   });
 
   it("filters carousel frames by the selected idle mode", () => {
@@ -279,7 +279,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["6", "H 8", "L 1"]);
+    ).toEqual(["6", "H", "8", "L", "1"]);
     expect(
       textsFor(
         renderMonitor(
