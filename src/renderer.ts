@@ -82,7 +82,7 @@ const COLORS = {
 type Gradient = readonly [string, string];
 type DisplayElement = DisplayDrawParams["elements"][number];
 const FRONT_RECTANGLE_SLOT_COUNT = 24;
-const FRONT_TEXT_SLOT_COUNT = 4;
+const FRONT_TEXT_SLOT_COUNT = 5;
 
 interface FrontPresentation {
   readonly elements: DisplayElement[];
@@ -619,6 +619,12 @@ const clockPresentation = (
     day: "2-digit",
   }).format(date);
   const dateLabel = `${month} ${dayOfMonth}`;
+  const weekday = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    weekday: "short",
+  })
+    .format(date)
+    .toUpperCase();
   const time = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     hour: "2-digit",
@@ -634,27 +640,44 @@ const clockPresentation = (
       ),
       frontRectangle(
         "front-clock-badge",
-        0,
+        44,
         0,
         28,
         16,
         dark ? COLORS.trueBlack : COLORS.cyan,
       ),
-      frontText(
-        "front-clock-date",
-        dateLabel,
-        14,
-        8,
-        "small",
-        dark ? COLORS.cyan : COLORS.black,
+      frontRectangle(
+        "front-clock-divider",
+        44,
+        0,
+        1,
+        16,
+        dark ? COLORS.cyanDark : COLORS.blueDark,
       ),
       frontText(
         "front-clock-time",
         time,
-        50,
+        22,
         8,
         "large",
         dark ? COLORS.ice : COLORS.white,
+      ),
+      frontText(
+        "front-clock-weekday",
+        weekday,
+        58,
+        1,
+        "tiny",
+        dark ? COLORS.cyan : COLORS.black,
+        "top_mid",
+      ),
+      frontText(
+        "front-clock-date",
+        dateLabel,
+        58,
+        10,
+        "small",
+        dark ? COLORS.cyan : COLORS.black,
       ),
     ],
   };
@@ -720,11 +743,20 @@ const weatherPalette = (condition: WeatherCondition): WeatherPalette => {
   };
 };
 
-interface WeatherDetail {
+interface StandardWeatherDetail {
+  kind: "standard";
   top: string;
   bottom: string;
   degree: boolean;
 }
+
+interface HighLowWeatherDetail {
+  kind: "highLow";
+  high: string;
+  low: string;
+}
+
+type WeatherDetail = StandardWeatherDetail | HighLowWeatherDetail;
 
 const roundedTemperature = (temperature: number): string => String(Math.round(temperature));
 
@@ -734,6 +766,7 @@ const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
     weather.precipitationProbability >= 30
   ) {
     return {
+      kind: "standard",
       top:
         weather.precipitationKind === "snow"
           ? "SNOW"
@@ -749,6 +782,7 @@ const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
     Math.abs(weather.feelsLikeCelsius - weather.temperatureCelsius) >= 3
   ) {
     return {
+      kind: "standard",
       top: "FEELS",
       bottom: roundedTemperature(weather.feelsLikeCelsius),
       degree: true,
@@ -756,19 +790,20 @@ const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
   }
   if (weather.highCelsius !== null && weather.lowCelsius !== null) {
     return {
-      top: `H ${roundedTemperature(weather.highCelsius)}`,
-      bottom: `L ${roundedTemperature(weather.lowCelsius)}`,
-      degree: false,
+      kind: "highLow",
+      high: roundedTemperature(weather.highCelsius),
+      low: roundedTemperature(weather.lowCelsius),
     };
   }
   if (weather.humidityPercent !== null) {
     return {
+      kind: "standard",
       top: "HUMID",
       bottom: `${Math.round(weather.humidityPercent)}%`,
       degree: false,
     };
   }
-  return { top: "NOW", bottom: "--", degree: false };
+  return { kind: "standard", top: "NOW", bottom: "--", degree: false };
 };
 
 const weatherPresentation = (
@@ -790,12 +825,80 @@ const weatherPresentation = (
     Math.round(temperatureCenter + temperature.length * 4.5 + 1),
   );
   const detail = weatherDetail(weather);
-  const highLow = detail.top.startsWith("H ");
-  const detailValueX = detail.degree
-    ? detail.bottom.length > 2
-      ? 58
-      : 59.5
-    : 61;
+  const detailElements =
+    detail.kind === "highLow"
+      ? [
+          frontText(
+            "front-weather-high-label",
+            "H",
+            53,
+            1,
+            "tiny",
+            themedPalette.accentText,
+            "top_left",
+          ),
+          frontText(
+            "front-weather-high-value",
+            detail.high,
+            70,
+            0,
+            "small",
+            themedPalette.accentText,
+            "top_right",
+          ),
+          frontText(
+            "front-weather-low-label",
+            "L",
+            53,
+            10,
+            "tiny",
+            themedPalette.accentText,
+            "top_left",
+          ),
+          frontText(
+            "front-weather-low-value",
+            detail.low,
+            70,
+            9,
+            "small",
+            themedPalette.accentText,
+            "top_right",
+          ),
+        ]
+      : [
+          frontText(
+            "front-weather-detail-label",
+            detail.top,
+            61,
+            1,
+            "tiny",
+            themedPalette.accentText,
+            "top_mid",
+          ),
+          frontText(
+            "front-weather-detail-value",
+            detail.bottom,
+            detail.degree
+              ? detail.bottom.length > 2
+                ? 58
+                : 59.5
+              : 61,
+            10,
+            "small",
+            themedPalette.accentText,
+            "center",
+          ),
+          ...(detail.degree
+            ? [
+                degreeElement(
+                  "front-weather-detail-degree",
+                  64,
+                  8,
+                  themedPalette.accentText,
+                ),
+              ]
+            : []),
+        ];
   return {
     elements: [
       frontBackground(themedPalette.background),
@@ -816,34 +919,7 @@ const weatherPresentation = (
         dark ? palette.accent : COLORS.white,
       ),
       frontRectangle("front-weather-badge", 50, 0, 22, 16, themedPalette.accent),
-      frontText(
-        "front-weather-detail-label",
-        detail.top,
-        61,
-        1,
-        highLow ? "small" : "tiny",
-        themedPalette.accentText,
-        "top_mid",
-      ),
-      frontText(
-        "front-weather-detail-value",
-        detail.bottom,
-        detailValueX,
-        10,
-        "small",
-        themedPalette.accentText,
-        "center",
-      ),
-      ...(detail.degree
-        ? [
-            degreeElement(
-              "front-weather-detail-degree",
-              64,
-              8,
-              themedPalette.accentText,
-            ),
-          ]
-        : []),
+      ...detailElements,
     ],
   };
 };

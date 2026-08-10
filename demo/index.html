@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Interactive 72 x 16 pixel preview of the BusyBar telephone booth status display."
+    />
+    <title>BusyBar Display Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./demo.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="https://github.com/djensenius/BusyBar">
+        <span class="brand-mark" aria-hidden="true"></span>
+        BusyBar
+      </a>
+      <a class="repository-link" href="https://github.com/djensenius/BusyBar">
+        View repository
+      </a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Interactive 72 x 16 preview</p>
+          <h1>The telephone booth, one glance at a time.</h1>
+          <p class="lede">
+            Browse the idle carousel, active call states, smart weather details, and
+            warnings rendered for the BUSY Bar front display.
+          </p>
+        </div>
+        <div class="hero-note">
+          <span class="status-dot" aria-hidden="true"></span>
+          <p>
+            The clock is live in <strong>America/Toronto</strong>. Browser text is an
+            approximation of the BUSY Bar bitmap fonts; artwork and layout use the same
+            72 x 16 coordinate system as the service.
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="gallery-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Display states</p>
+            <h2 id="gallery-title">Full frame gallery</h2>
+          </div>
+          <p>All Home Assistant weather conditions are included.</p>
+        </div>
+        <div class="frames" id="frames"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        <a href="https://github.com/djensenius/BusyBar">BusyBar</a>
+        is the standalone display service for the Telephone-Booth installation.
+      </p>
+    </footer>
+  </body>
+</html>

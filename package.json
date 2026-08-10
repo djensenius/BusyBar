@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check": "vp run typecheck && vp run lint && vp run test && vp run build",
+    "check": "vp run typecheck && vp run lint && vp run test && vp run build && vp run demo:check",
+    "demo:check": "node --check demo/demo.js",
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/index.ts",
     "format": "vp fmt",
     "lint": "vp lint src test",
