@@ -29,6 +29,9 @@ gradient cards:
 - A 24-hour local clock with a weekday/date card
 - Current weather, when Home Assistant weather is configured
 
+Set `BUSY_BAR_FRONT_ROTATION_SECONDS` from 3 to 600 seconds (10 minutes) to
+control how long each idle card remains visible.
+
 Call activity interrupts the carousel immediately with `CALLING`, `PLAYING`,
 `RECORDING`, or `SENDING`. Warnings and faults remain pinned until recovery.
 
@@ -166,9 +169,9 @@ The optional companion sensors improve the detail badge. The weather entity
 still supplies current conditions, temperature, and hourly/daily forecasts.
 The standard Home Assistant `sun.sun` entity automatically switches idle cards
 to black backgrounds with condition colors used as accents after sunset. At
-23:00 local time, the monitor sets the hardware brightness to 5% and restores
-automatic brightness at sunrise. Override the late-night level with
-`BUSY_BAR_LATE_NIGHT_BRIGHTNESS`.
+23:00 local time, the monitor sets the hardware brightness to the configured
+late-night level and restores automatic brightness at sunrise. Set
+`BUSY_BAR_LATE_NIGHT_BRIGHTNESS` from 0 to 100 percent; the default is 5.
 
 ## Deployment order
 

@@ -292,11 +292,11 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
       integer(env, "BUSY_BAR_SYSTEM_STALE_AFTER_SECONDS", sharedStaleAfterSeconds ?? 20, 5, 3600) *
       1000,
     renderDebounceMs: integer(env, "BUSY_BAR_RENDER_DEBOUNCE_MS", 250, 0, 10_000),
-    frontRotationMs: integer(env, "BUSY_BAR_FRONT_ROTATION_SECONDS", 8, 3, 60) * 1000,
+    frontRotationMs: integer(env, "BUSY_BAR_FRONT_ROTATION_SECONDS", 8, 3, 600) * 1000,
     summaryPollIntervalMs: integer(env, "BUSY_BAR_SUMMARY_POLL_SECONDS", 30, 10, 3600) * 1000,
     timeZone,
     clockEnabled: boolean(env, "BUSY_BAR_CLOCK_ENABLED", true),
-    lateNightBrightness: integer(env, "BUSY_BAR_LATE_NIGHT_BRIGHTNESS", 5, 5, 100),
+    lateNightBrightness: integer(env, "BUSY_BAR_LATE_NIGHT_BRIGHTNESS", 5, 0, 100),
     homeAssistant,
     startSceneId,
     startToggleLightIds,

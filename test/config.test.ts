@@ -30,6 +30,7 @@ describe("monitor configuration", () => {
       apiUrl: "https://api.busy.app",
       statusStaleAfterMs: 75_000,
       systemStaleAfterMs: 20_000,
+      frontRotationMs: 8_000,
       summaryPollIntervalMs: 30_000,
       timeZone: "America/Toronto",
       clockEnabled: true,
@@ -40,6 +41,19 @@ describe("monitor configuration", () => {
       dialSceneId: null,
       weather: null,
       audioEnabled: false,
+    });
+  });
+
+  it("accepts the full display brightness and rotation ranges", () => {
+    expect(
+      resolveConfig({
+        ...base,
+        BUSY_BAR_FRONT_ROTATION_SECONDS: "600",
+        BUSY_BAR_LATE_NIGHT_BRIGHTNESS: "0",
+      }),
+    ).toMatchObject({
+      frontRotationMs: 600_000,
+      lateNightBrightness: 0,
     });
   });
 
@@ -126,6 +140,12 @@ describe("monitor configuration", () => {
     );
     expect(() => resolveConfig({ ...base, BUSY_BAR_STATUS_STALE_AFTER_SECONDS: "4" })).toThrow(
       "BUSY_BAR_STATUS_STALE_AFTER_SECONDS",
+    );
+    expect(() => resolveConfig({ ...base, BUSY_BAR_FRONT_ROTATION_SECONDS: "601" })).toThrow(
+      "BUSY_BAR_FRONT_ROTATION_SECONDS",
+    );
+    expect(() => resolveConfig({ ...base, BUSY_BAR_LATE_NIGHT_BRIGHTNESS: "101" })).toThrow(
+      "BUSY_BAR_LATE_NIGHT_BRIGHTNESS",
     );
     expect(() => resolveConfig({ ...base, BUSY_BAR_AUDIO_ENABLED: "TRUE" })).toThrow(
       "BUSY_BAR_AUDIO_ENABLED",
