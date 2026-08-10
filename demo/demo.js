@@ -1,3 +1,7 @@
+const DISPLAY_WIDTH = 72;
+const DISPLAY_HEIGHT = 16;
+const BACKING_SCALE = 8;
+
 const COLORS = {
   blueDark: "#003b7a",
   amber: "#faab00",
@@ -671,7 +675,10 @@ const drawProblem = (context, design, blink) => {
 
 const render = (canvas, design, blink) => {
   const context = canvas.getContext("2d");
-  context.clearRect(0, 0, 72, 16);
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.setTransform(BACKING_SCALE, 0, 0, BACKING_SCALE, 0, 0);
+  context.imageSmoothingEnabled = false;
 
   if (design.kind === "clock") {
     drawClock(context, design);
@@ -708,8 +715,8 @@ const canvases = designs.map((design) => {
   shell.className = "canvas-shell";
 
   const canvas = document.createElement("canvas");
-  canvas.width = 72;
-  canvas.height = 16;
+  canvas.width = DISPLAY_WIDTH * BACKING_SCALE;
+  canvas.height = DISPLAY_HEIGHT * BACKING_SCALE;
   canvas.setAttribute("role", "img");
   canvas.setAttribute("aria-label", `${design.name} BUSY Bar frame`);
 
