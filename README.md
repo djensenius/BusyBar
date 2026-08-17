@@ -5,7 +5,8 @@ Standalone physical status monitor for the
 installation. It reads the authenticated
 [Telephone-Booth Operator](https://github.com/djensenius/Telephone-Booth-Operator)
 API and renders booth state, today/overall counters, time, optional weather, and system
-health through BUSY Cloud.
+health through BUSY Cloud, with automatic LAN failover when the local device URL
+and access key are configured.
 
 The service is deliberately independent of the Operator deployment. Run one
 instance on an always-on home server, Portainer host, or cloud container.
@@ -54,7 +55,8 @@ to cycle backward through all four rear pages.
 - A BUSY Bar linked to BUSY Cloud
 - A BUSY Cloud API token from <https://cloud.busy.app/api-tokens>
 - A monitor-scoped token from the Operator console
-- Outbound HTTPS/WSS access to BUSY Cloud and the Operator API
+- Outbound access to BUSY Cloud and the Operator API
+- Optional LAN access to the BUSY Bar for display failover and physical input
 - Optional Home Assistant access for weather
 
 No inbound ports or database access are required.
@@ -69,7 +71,7 @@ Create a stack from [`compose.yaml`](compose.yaml), then define:
 | `BUSY_BAR_OPERATOR_API_URL`     | Operator origin, without `/v1`             |
 | `BUSY_BAR_OPERATOR_TOKEN`       | Monitor-scoped Operator token              |
 | `BUSY_BAR_BOOTH_ID`             | Usually `booth-01`                         |
-| `BUSY_BAR_LOCAL_URL`            | Optional LAN URL for physical input events |
+| `BUSY_BAR_LOCAL_URL`            | Optional LAN URL for input and display failover |
 | `BUSY_BAR_LOCAL_ACCESS_KEY`     | Password for the BUSY Bar LAN API          |
 | `BUSY_BAR_START_SCENE_ID`       | Scene for Start/Pause, such as `scene.comfy` |
 | `BUSY_BAR_DIAL_SCENE_ID`        | Scene for dial press, such as `scene.good_night` |
@@ -86,6 +88,9 @@ Configure the password-protected local URL and access key to receive physical
 dial events. Turning the dial cycles through Weather, Clock, Weather + Clock,
 Telephone Booth counters, and the full carousel. Active booth states and health
 warnings continue to override the selected idle mode.
+
+The local connection also keeps display updates available during BUSY Cloud
+errors and uses a WebSocket heartbeat to reconnect stalled input streams.
 
 The Start/Pause button and dial press can activate Home Assistant scenes with
 `BUSY_BAR_START_SCENE_ID` and `BUSY_BAR_DIAL_SCENE_ID`. Both trigger only on
