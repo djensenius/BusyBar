@@ -5,7 +5,8 @@ Standalone physical status monitor for the
 installation. It reads the authenticated
 [Telephone-Booth Operator](https://github.com/djensenius/Telephone-Booth-Operator)
 API and renders booth state, today/overall counters, time, optional weather, and system
-health through BUSY Cloud, with automatic LAN failover when the local device URL is configured.
+health through BUSY Cloud, with automatic LAN failover when the local device URL
+and access key are configured.
 
 The service is deliberately independent of the Operator deployment. Run one
 instance on an always-on home server, Portainer host, or cloud container.
