@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
+import { WebSocketServer } from "ws";
 import {
   busyBarInputWebSocketUrl,
   decodeBusyBarCloudFrame,
   decodeBusyBarInputEvents,
   decodeBusyBarInputFrame,
+  startBusyBarInputStream,
 } from "../src/input-stream.js";
 
 describe("BUSY Bar input protobuf decoder", () => {
@@ -49,5 +51,56 @@ describe("BUSY Bar input protobuf decoder", () => {
     expect(busyBarInputWebSocketUrl("http://192.168.1.247", "1234567890")).toBe(
       "ws://192.168.1.247/api/status/ws?x-api-token=1234567890",
     );
+  });
+
+  it("disconnects a half-open input stream", async () => {
+    const server = new WebSocketServer({
+      host: "127.0.0.1",
+      port: 0,
+      autoPong: false,
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("listening", resolve);
+      server.once("error", reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing WebSocket address");
+
+    const statuses: boolean[] = [];
+    const errors: Error[] = [];
+    let resolveDisconnected = (): void => undefined;
+    let rejectDisconnected = (_error: Error): void => undefined;
+    const disconnected = new Promise<void>((resolve, reject) => {
+      resolveDisconnected = resolve;
+      rejectDisconnected = reject;
+    });
+    const timeout = setTimeout(
+      () => rejectDisconnected(new Error("Input heartbeat did not time out")),
+      1_000,
+    );
+    const handle = startBusyBarInputStream({
+      url: `http://127.0.0.1:${address.port}`,
+      accessKey: "1234",
+      heartbeatIntervalMs: 20,
+      onInput: () => undefined,
+      onStatus: (connected) => {
+        statuses.push(connected);
+        if (!connected) resolveDisconnected();
+      },
+      onError: (error) => errors.push(error),
+    });
+
+    try {
+      await disconnected;
+      expect(statuses).toEqual([true, false]);
+      expect(errors.some((error) => error.message.includes("heartbeat timed out"))).toBe(true);
+    } finally {
+      clearTimeout(timeout);
+      handle.stop();
+      for (const client of server.clients) client.terminate();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

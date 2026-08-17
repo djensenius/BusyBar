@@ -13,7 +13,10 @@ interface BusyBarInputStreamOptions {
   onFrame?(byteLength: number, eventCount: number): void;
   onStatus(connected: boolean): void;
   onError(error: Error): void;
+  heartbeatIntervalMs?: number;
 }
+
+const INPUT_HEARTBEAT_INTERVAL_MS = 15_000;
 
 const root = protobuf.Root.fromJSON({
   nested: {
@@ -158,8 +161,14 @@ export const startBusyBarInputStream = (
 ): BusyBarInputStreamHandle => {
   let socket: WebSocket | null = null;
   let retry: NodeJS.Timeout | null = null;
+  let heartbeat: NodeJS.Timeout | null = null;
   let stopped = false;
   let attempt = 0;
+
+  const clearHeartbeat = (): void => {
+    if (heartbeat) clearInterval(heartbeat);
+    heartbeat = null;
+  };
 
   const reconnect = (): void => {
     if (stopped || retry) return;
@@ -177,13 +186,37 @@ export const startBusyBarInputStream = (
     const current = new WebSocket(
       busyBarInputWebSocketUrl(options.url, options.accessKey),
     );
+    let awaitingPong = false;
     socket = current;
     current.on("open", () => {
       attempt = 0;
       options.onStatus(true);
       current.send(JSON.stringify({ enable: true }));
+      clearHeartbeat();
+      heartbeat = setInterval(() => {
+        if (socket !== current || current.readyState !== WebSocket.OPEN) return;
+        if (awaitingPong) {
+          options.onError(new Error("BUSY Bar input stream heartbeat timed out"));
+          current.terminate();
+          return;
+        }
+        awaitingPong = true;
+        try {
+          current.ping();
+        } catch (error) {
+          options.onError(
+            error instanceof Error ? error : new Error("BUSY Bar input heartbeat failed"),
+          );
+          current.terminate();
+        }
+      }, options.heartbeatIntervalMs ?? INPUT_HEARTBEAT_INTERVAL_MS);
+      heartbeat.unref();
+    });
+    current.on("pong", () => {
+      awaitingPong = false;
     });
     current.on("message", (data, isBinary) => {
+      awaitingPong = false;
       const bytes = decodeBusyBarInputFrame(data, isBinary);
       if (!bytes) return;
       try {
@@ -201,6 +234,7 @@ export const startBusyBarInputStream = (
     });
     current.on("close", (code) => {
       if (socket !== current) return;
+      clearHeartbeat();
       socket = null;
       options.onStatus(false);
       if (!stopped) {
@@ -219,6 +253,7 @@ export const startBusyBarInputStream = (
       stopped = true;
       if (retry) clearTimeout(retry);
       retry = null;
+      clearHeartbeat();
       socket?.close(1000, "monitor stopped");
       socket = null;
     },
