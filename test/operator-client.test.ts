@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
+  readRouterTelemetry,
   readStatus,
   readSummary,
   readSystem,
@@ -60,6 +61,44 @@ describe("Operator REST client", () => {
     await expect(
       readSystem("https://operator.example.com", "token", "booth-01"),
     ).resolves.toBeNull();
+  });
+
+  it("reads the router battery component for the configured booth", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      response([
+        {
+          boothId: "booth-01",
+          componentId: "router",
+          displayName: "Travel router",
+          latestSnapshot: {
+            battery: {
+              chargePercent: 78,
+              temperatureCelsius: 31.5,
+              voltageVolts: 3.88,
+              currentAmperes: -0.42,
+            },
+          },
+          capturedAt: "2026-08-20T14:59:59.000Z",
+          receivedAt: "2026-08-20T15:00:00.000Z",
+        },
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      readRouterTelemetry("https://operator.example.com", "token", "booth-01"),
+    ).resolves.toMatchObject({
+      componentId: "router",
+      latestSnapshot: {
+        battery: {
+          chargePercent: 78,
+          temperatureCelsius: 31.5,
+        },
+      },
+    });
+    expect(fetchMock.mock.calls[0]?.[0].toString()).toBe(
+      "https://operator.example.com/v1/system/components/current?boothId=booth-01&componentId=router",
+    );
   });
 
   it("requests daily counters in the configured time zone and normalizes legacy fields", async () => {
@@ -139,25 +178,29 @@ describe("Operator REST client", () => {
       "fetch",
       vi.fn<typeof fetch>((input) => {
         const url = input.toString();
+        if (url.includes("/v1/status")) {
+          return Promise.resolve(
+            response({
+              id: 42,
+              repeatCount: 3,
+              state: "idle",
+              updatedAt: "2026-08-08T19:00:00.000Z",
+              currentQuestionId: null,
+              currentMessageId: null,
+              lastError: null,
+              runtimeMode: "real",
+            }),
+          );
+        }
         return Promise.resolve(
-          url.includes("/v1/status")
-            ? response({
-                id: 42,
-                repeatCount: 3,
-                state: "idle",
-                updatedAt: "2026-08-08T19:00:00.000Z",
-                currentQuestionId: null,
-                currentMessageId: null,
-                lastError: null,
-                runtimeMode: "real",
-              })
-            : response(null, 404),
+          url.includes("/v1/system/components/current") ? response([]) : response(null, 404),
         );
       }),
     );
     const monitor = {
       updateStatus: vi.fn(),
       updateSystem: vi.fn(),
+      updateRouterTelemetry: vi.fn(),
       updateSummary: vi.fn(),
     };
 

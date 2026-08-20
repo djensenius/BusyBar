@@ -72,6 +72,17 @@ const BoothTailscaleStatsSchema = z
   })
   .passthrough();
 
+export const BoothFanStatsSchema = z
+  .object({
+    commandedOn: z.boolean().nullable().optional(),
+    pwmRatio: z.number().min(0).max(1).nullable().optional(),
+    rpm: z.number().int().nonnegative().nullable().optional(),
+    coolingState: z.number().int().nonnegative().nullable().optional(),
+    maxCoolingState: z.number().int().nonnegative().nullable().optional(),
+  })
+  .passthrough();
+export type BoothFanStats = z.infer<typeof BoothFanStatsSchema>;
+
 export const BoothThrottlingFlagsSchema = z
   .object({
     undervoltage: z.boolean().nullable().optional(),
@@ -93,6 +104,7 @@ export const BoothSystemSnapshotSchema = z
     networks: z.array(BoothNetworkStatsSchema).nullable().optional(),
     uptimeSeconds: z.number().nonnegative().nullable().optional(),
     tailscale: BoothTailscaleStatsSchema.nullable().optional(),
+    fan: BoothFanStatsSchema.nullable().optional(),
     throttling: BoothThrottlingFlagsSchema.nullable().optional(),
     runtimeMode: RuntimeModeSchema.nullable().optional(),
   })
@@ -106,6 +118,42 @@ export const BoothSystemSnapshotEnvelopeSchema = z.object({
   version: z.string().min(1).max(64).nullable().optional(),
 });
 export type BoothSystemSnapshotEnvelope = z.infer<typeof BoothSystemSnapshotEnvelopeSchema>;
+
+export const RouterBatterySnapshotSchema = z
+  .object({
+    present: z.boolean().nullable().optional(),
+    chargePercent: z.number().finite().min(0).max(100).nullable().optional(),
+    temperatureCelsius: z.number().finite().min(-100).max(250).nullable().optional(),
+    voltageVolts: z.number().finite().min(0).max(1_000).nullable().optional(),
+    currentAmperes: z.number().finite().min(-1_000).max(1_000).nullable().optional(),
+    health: z.string().max(128).nullable().optional(),
+    cycleCount: z.number().int().min(0).max(10_000_000).nullable().optional(),
+    chargeCount: z.number().int().min(0).max(10_000_000).nullable().optional(),
+    abnormal: z.boolean().nullable().optional(),
+    abnormalType: z.number().int().min(-1).max(255).nullable().optional(),
+  })
+  .passthrough();
+export type RouterBatterySnapshot = z.infer<typeof RouterBatterySnapshotSchema>;
+
+const RouterComponentSnapshotSchema = z
+  .object({
+    battery: RouterBatterySnapshotSchema.optional(),
+  })
+  .passthrough();
+
+export const RouterTelemetryEnvelopeSchema = z
+  .object({
+    boothId: z.string(),
+    componentId: z.string(),
+    displayName: z.string(),
+    latestSnapshot: RouterComponentSnapshotSchema.nullable(),
+    capturedAt: z.string().datetime().nullable(),
+    receivedAt: z.string().datetime().nullable(),
+  })
+  .passthrough();
+export type RouterTelemetryEnvelope = z.infer<typeof RouterTelemetryEnvelopeSchema>;
+
+export const RouterTelemetryListSchema = z.array(RouterTelemetryEnvelopeSchema);
 
 export const MonitorBreakdownTodaySchema = z.object({
   noSelection: z.number().int().nonnegative(),

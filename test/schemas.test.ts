@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { MonitorSummarySchema } from "../src/schemas.js";
+import {
+  BoothSystemSnapshotSchema,
+  MonitorSummarySchema,
+  RouterTelemetryListSchema,
+} from "../src/schemas.js";
 
 const baseSummary = {
   messagesToday: 8,
@@ -25,6 +29,61 @@ describe("monitor summary schema", () => {
       dayStartedAt: "2026-08-08T04:00:00.000Z",
       generatedAt: "2026-08-08T19:00:00.000Z",
       timeZone: "America/Toronto",
+    });
+  });
+
+  describe("booth vitals schemas", () => {
+    it("parses commanded fan cooling telemetry without requiring RPM", () => {
+      expect(
+        BoothSystemSnapshotSchema.parse({
+          temperatureCelsius: 48.5,
+          fan: {
+            commandedOn: true,
+            pwmRatio: 0.4,
+            coolingState: 2,
+            maxCoolingState: 4,
+          },
+        }).fan,
+      ).toMatchObject({
+        commandedOn: true,
+        pwmRatio: 0.4,
+        coolingState: 2,
+        maxCoolingState: 4,
+      });
+    });
+
+    it("parses bounded router battery telemetry", () => {
+      const sources = RouterTelemetryListSchema.parse([
+        {
+          boothId: "booth-01",
+          componentId: "router",
+          displayName: "Travel router",
+          latestSnapshot: {
+            battery: {
+              chargePercent: 78,
+              temperatureCelsius: 31.5,
+              voltageVolts: 3.88,
+              currentAmperes: -0.42,
+            },
+          },
+          capturedAt: "2026-08-20T14:59:59.000Z",
+          receivedAt: "2026-08-20T15:00:00.000Z",
+        },
+      ]);
+
+      expect(sources[0]?.latestSnapshot?.battery?.chargePercent).toBe(78);
+      expect(() =>
+        RouterTelemetryListSchema.parse([
+          {
+            boothId: "booth-01",
+            componentId: "router",
+            displayName: "Travel router",
+            latestSnapshot: { battery: { chargePercent: 101 } },
+            capturedAt: null,
+            receivedAt: null,
+          },
+        ]),
+      ).toThrow();
     });
   });
 
