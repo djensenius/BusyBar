@@ -401,72 +401,72 @@ describe("monitor renderer", () => {
       "instructionPlaybackStartsToday",
     ]);
     expect(
-    availableFrontFrames(
-      { ...state, idleMode: "telephone", summary: allTimeListenSummary },
-      weatherEnabledConfig,
-      now,
-    ),
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: allTimeListenSummary },
+        weatherEnabledConfig,
+        now,
+      ),
     ).toEqual([
-    "interactionsToday",
-    "messagesToday",
-    "interactionsTotal",
-    "messagesTotal",
-    "messagePlaybackStartsTotal",
-    "noSelectionToday",
-    "wrongNumberAttemptsToday",
-    "messagesLeftToday",
-    "messagePlaybackStartsToday",
-    "instructionPlaybackStartsToday",
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
+      "noSelectionToday",
+      "wrongNumberAttemptsToday",
+      "messagesLeftToday",
+      "messagePlaybackStartsToday",
+      "instructionPlaybackStartsToday",
     ]);
     expect(
-    availableFrontFrames(
-      { ...state, idleMode: "telephone", summary: mixedZeroDailySummary },
-      weatherEnabledConfig,
-      now,
-    ),
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: mixedZeroDailySummary },
+        weatherEnabledConfig,
+        now,
+      ),
     ).toEqual([
-    "messagesToday",
-    "interactionsTotal",
-    "messagesTotal",
-    "messagePlaybackStartsTotal",
-    "wrongNumberAttemptsToday",
-    "messagePlaybackStartsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
+      "wrongNumberAttemptsToday",
+      "messagePlaybackStartsToday",
     ]);
     expect(
-    availableFrontFrames(
-      { ...state, idleMode: "telephone", summary: zeroDailySummary },
-      weatherEnabledConfig,
-      now,
-    ),
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: zeroDailySummary },
+        weatherEnabledConfig,
+        now,
+      ),
     ).toEqual([
-    "interactionsTotal",
-    "messagesTotal",
-    "messagePlaybackStartsTotal",
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
     ]);
     expect(
-    availableFrontFrames(
-      { ...state, idleMode: "telephone", summary: unknownPickupDaySummary },
-      weatherEnabledConfig,
-      now,
-    ),
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: unknownPickupDaySummary },
+        weatherEnabledConfig,
+        now,
+      ),
     ).toEqual([
-    "interactionsToday",
-    "messagesToday",
-    "interactionsTotal",
-    "messagesTotal",
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
     ]);
   });
 
   it("keeps unknown pickup-day summaries available instead of treating them as zero", () => {
     expect(
-    textsFor(
-      renderMonitor(
-        model({ frontFrame: "interactionsToday", summary: unknownPickupDaySummary }),
-        config,
-        now,
-      ).payload,
-      "front",
-    ),
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "interactionsToday", summary: unknownPickupDaySummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
     ).toEqual(["PICKUP", "DAY", "--"]);
   });
 
