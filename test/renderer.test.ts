@@ -91,13 +91,24 @@ const system: BoothSystemSnapshotEnvelope = {
 };
 
 const summary: MonitorSummary = {
-  callsToday: 12,
+  interactionsToday: 12,
   messagesToday: 8,
-  callsTotal: 342,
+  interactionsTotal: 342,
   messagesTotal: 187,
   dayStartedAt: "2026-07-31T04:00:00.000Z",
   generatedAt: new Date(now - 1_000).toISOString(),
   timeZone: "America/Toronto",
+};
+
+const breakdownSummary: MonitorSummary = {
+  ...summary,
+  breakdownToday: {
+    noSelection: 3,
+    wrongNumberAttempts: 5,
+    messagesLeft: 4,
+    messagePlaybackStarts: 7,
+    instructionPlaybackStarts: 6,
+  },
 };
 
 const weather: WeatherSnapshot = {
@@ -121,7 +132,7 @@ const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   summary: null,
   weather: null,
   weatherReceivedAtMs: null,
-  frontFrame: "callsToday",
+  frontFrame: "interactionsToday",
   idleMode: "all",
   idleModeAnnouncement: null,
   sceneAnnouncement: null,
@@ -152,13 +163,13 @@ const frontFillColors = (payload: DisplayDrawParams): string[] =>
   );
 
 describe("monitor renderer", () => {
-  it("renders today and overall counters while healthy and idle", () => {
+  it("renders pickup and message counters while healthy and idle", () => {
     expect(
       textsFor(
-        renderMonitor(model({ frontFrame: "callsToday", summary }), config, now).payload,
+        renderMonitor(model({ frontFrame: "interactionsToday", summary }), config, now).payload,
         "front",
       ),
-    ).toEqual(["CALLS", "DAY", "12"]);
+    ).toEqual(["PICK", "DAY", "12"]);
     expect(
       textsFor(
         renderMonitor(model({ frontFrame: "messagesToday", summary }), config, now).payload,
@@ -167,10 +178,10 @@ describe("monitor renderer", () => {
     ).toEqual(["MSGS", "DAY", "8"]);
     expect(
       textsFor(
-        renderMonitor(model({ frontFrame: "callsTotal", summary }), config, now).payload,
+        renderMonitor(model({ frontFrame: "interactionsTotal", summary }), config, now).payload,
         "front",
       ),
-    ).toEqual(["CALLS", "ALL", "342"]);
+    ).toEqual(["PICK", "ALL", "342"]);
     expect(
       textsFor(
         renderMonitor(model({ frontFrame: "messagesTotal", summary }), config, now).payload,
@@ -178,10 +189,63 @@ describe("monitor renderer", () => {
       ),
     ).toEqual(["MSGS", "ALL", "187"]);
     expect(textsFor(renderMonitor(model(), config, now).payload, "front")).toEqual([
-      "CALLS",
+      "PICK",
       "DAY",
       "--",
     ]);
+  });
+
+  it("renders daily pickup breakout cards when the server provides them", () => {
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "noSelectionToday", summary: breakdownSummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["NO SEL", "DAY", "3"]);
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "wrongNumberAttemptsToday", summary: breakdownSummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["WRONG", "DAY", "5"]);
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "messagesLeftToday", summary: breakdownSummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["LEFT", "DAY", "4"]);
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "messagePlaybackStartsToday", summary: breakdownSummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["LISTEN", "DAY", "7"]);
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "instructionPlaybackStartsToday", summary: breakdownSummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["INSTR", "DAY", "6"]);
   });
 
   it("renders a 24-hour clock", () => {
@@ -210,11 +274,33 @@ describe("monitor renderer", () => {
     ).toEqual(["weather", "clock"]);
     expect(
       availableFrontFrames(
-        { ...state, idleMode: "telephone" },
+        { ...state, idleMode: "telephone", summary },
         weatherEnabledConfig,
         now,
       ),
-    ).toEqual(["callsToday", "messagesToday", "callsTotal", "messagesTotal"]);
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+    ]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: breakdownSummary },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+      "noSelectionToday",
+      "wrongNumberAttemptsToday",
+      "messagesLeftToday",
+      "messagePlaybackStartsToday",
+      "instructionPlaybackStartsToday",
+    ]);
   });
 
   it("shows a temporary mode confirmation", () => {
@@ -297,17 +383,31 @@ describe("monitor renderer", () => {
     ]);
   });
 
-  it("keeps telephone-booth details on the rear overview", () => {
+  it("keeps a compact legacy overview when daily breakdowns are unavailable", () => {
     expect(
       textsFor(renderMonitor(model({ summary }), smartHomeConfig, now).payload, "back"),
     ).toEqual([
-      "CALLS 12 MSGS 8",
+      "DAY PICKUPS 12 MSGS 8",
       "STATE idle",
       "AGE 1s",
       "VIEW ALL",
       "QUESTION --",
       "MESSAGE --",
       "ERROR CLEAR",
+    ]);
+  });
+
+  it("shows a compact daily pickup breakout on the rear overview", () => {
+    expect(
+      textsFor(renderMonitor(model({ summary: breakdownSummary }), smartHomeConfig, now).payload, "back"),
+    ).toEqual([
+      "DAY PICKUPS 12 MSGS 8",
+      "NO SEL 3 WRONG 5",
+      "LEFT 4 LISTEN 7",
+      "INSTR 6",
+      "STATE idle AGE 1s",
+      "QUESTION -- MESSAGE --",
+      "ERROR CLEAR VIEW ALL",
     ]);
   });
 
@@ -375,7 +475,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["CALLS", "DAY", "--"]);
+    ).toEqual(["PICK", "DAY", "--"]);
 
     for (const condition of WeatherConditionSchema.options) {
       const rendered = renderMonitor(
@@ -393,7 +493,7 @@ describe("monitor renderer", () => {
 
   it("reuses a fixed set of front element IDs between carousel frames", () => {
     const calls = renderMonitor(
-      model({ frontFrame: "callsToday", summary }),
+      model({ frontFrame: "interactionsToday", summary }),
       config,
       now,
     ).payload;
@@ -422,7 +522,7 @@ describe("monitor renderer", () => {
       height: 16,
       fill: "gradient_h",
     });
-    expect(textsFor(rendered.payload, "back")).toContain("CALLS -- MSGS --");
+    expect(textsFor(rendered.payload, "back")).toContain("DAY PICKUPS -- MSGS --");
   });
 
   it("dims idle cards after sunset", () => {
@@ -480,7 +580,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["CALLS", "DAY", "12"]);
+    ).toEqual(["PICK", "DAY", "12"]);
     expect(
       textsFor(
         renderMonitor(model({ statusReceivedAtMs: now - 80_000 }), config, now).payload,

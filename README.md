@@ -23,20 +23,23 @@ states, and warnings. The self-contained GitHub Pages source lives in
 While the booth is healthy and idle, the front rotates through full-width
 gradient cards:
 
-- `CALLS / DAY / n`
+- `PICK / DAY / n`
 - `MSGS / DAY / n`
-- `CALLS / ALL / n`
+- `PICK / ALL / n`
 - `MSGS / ALL / n`
+- When the Operator summary includes `breakdownToday`, daily `NO SEL`,
+  `WRONG`, `LEFT`, `LISTEN`, and `INSTR` cards
 - A 24-hour local clock with a weekday/date card
 - Current weather, when Home Assistant weather is configured
 
 Set `BUSY_BAR_FRONT_ROTATION_SECONDS` from 3 to 600 seconds (10 minutes) to
 control how long each idle card remains visible.
 
-Call activity interrupts the carousel immediately with `CALLING`, `PLAYING`,
+Live booth activity interrupts the carousel immediately with `CALLING`, `PLAYING`,
 `RECORDING`, or `SENDING`. Warnings and faults remain pinned until recovery.
 
-Calls, messages, and active states use Canadian telephone-booth pixel art.
+Pickup, message, breakout, and active-state cards use Canadian
+telephone-booth pixel art.
 Weather uses condition-specific artwork for every Home Assistant weather state.
 Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
@@ -44,11 +47,14 @@ or wind-chill difference, then the daily high and low.
 ## Rear display
 
 The rear display keeps the existing booth overview, system, and network pages,
-and adds a `SMART HOME` page. It shows the Start and dial scene mappings,
-whether the configured lights currently match Comfy, the target and current
-brightness levels, and the last smart-home action. A scene button temporarily
-opens this page for four seconds, then returns to the previous page. Press Back
-to cycle backward through all four rear pages.
+and adds a `SMART HOME` page. When the Operator summary includes
+`breakdownToday`, the booth overview compacts the current-day pickup
+breakout onto the rear page while still showing live booth details. The smart
+home page shows the Start and dial scene mappings, whether the configured
+lights currently match Comfy, the target and current brightness levels, and
+the last smart-home action. A scene button temporarily opens this page for four
+seconds, then returns to the previous page. Press Back to cycle backward
+through all four rear pages.
 
 ## Requirements
 
@@ -117,7 +123,7 @@ on.
    differs.
 5. Pull `ghcr.io/djensenius/busybar:latest` and redeploy the
    stack.
-6. Verify the idle carousel, active-call overrides, structured logs, and
+6. Verify the idle carousel, active-state overrides, structured logs, and
    recovery after restarting the container.
 
 After the first image is published, ensure the GHCR package is public before
@@ -184,3 +190,8 @@ The counter carousel requires Operator API support for
 `GET /v1/monitor/summary`. Deploy the matching Operator release before updating
 this worker. Older Operator releases still provide state and health, but summary
 polls will log `404` until the endpoint is available.
+
+During the rolling additive analytics rollout, older summary payloads still
+drive the four core `PICK`/`MSGS` day and all-time pickup cards. Matching
+Operator releases automatically add the five daily breakout cards and the rear
+overview breakout from the additive `interactions*` fields.

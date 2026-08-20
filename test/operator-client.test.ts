@@ -62,7 +62,7 @@ describe("Operator REST client", () => {
     ).resolves.toBeNull();
   });
 
-  it("requests daily counters in the configured time zone", async () => {
+  it("requests daily counters in the configured time zone and normalizes legacy fields", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       response({
         callsToday: 12,
@@ -78,15 +78,58 @@ describe("Operator REST client", () => {
 
     await expect(
       readSummary("https://operator.example.com", "token", "America/Toronto"),
-    ).resolves.toMatchObject({
-      callsToday: 12,
+    ).resolves.toEqual({
+      interactionsToday: 12,
       messagesToday: 8,
-      callsTotal: 120,
+      interactionsTotal: 120,
       messagesTotal: 80,
+      dayStartedAt: "2026-08-08T04:00:00.000Z",
+      generatedAt: "2026-08-08T19:00:00.000Z",
+      timeZone: "America/Toronto",
     });
     expect(fetchMock.mock.calls[0]?.[0].toString()).toBe(
       "https://operator.example.com/v1/monitor/summary?timeZone=America%2FToronto",
     );
+  });
+
+  it("prefers additive interaction fields and parses daily breakdowns", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        response({
+          interactionsToday: 14,
+          callsToday: 12,
+          messagesToday: 8,
+          interactionsTotal: 144,
+          callsTotal: 120,
+          messagesTotal: 80,
+          breakdownToday: {
+            noSelection: 3,
+            wrongNumberAttempts: 5,
+            messagesLeft: 4,
+            messagePlaybackStarts: 7,
+            instructionPlaybackStarts: 6,
+          },
+          dayStartedAt: "2026-08-08T04:00:00.000Z",
+          generatedAt: "2026-08-08T19:00:00.000Z",
+          timeZone: "America/Toronto",
+        }),
+      ),
+    );
+
+    await expect(
+      readSummary("https://operator.example.com", "token", "America/Toronto"),
+    ).resolves.toMatchObject({
+      interactionsToday: 14,
+      interactionsTotal: 144,
+      breakdownToday: {
+        noSelection: 3,
+        wrongNumberAttempts: 5,
+        messagesLeft: 4,
+        messagePlaybackStarts: 7,
+        instructionPlaybackStarts: 6,
+      },
+    });
   });
 
   it("starts recovery polling without waiting for an initial API read", async () => {
