@@ -22,11 +22,18 @@ import type {
 } from "./schemas.js";
 import type { WeatherCondition, WeatherSnapshot } from "./weather-client.js";
 
-export type FrontFrame =
-  | "callsToday"
+export type SummaryFrontFrame =
+  | "interactionsToday"
   | "messagesToday"
-  | "callsTotal"
+  | "interactionsTotal"
   | "messagesTotal"
+  | "noSelectionToday"
+  | "wrongNumberAttemptsToday"
+  | "messagesLeftToday"
+  | "messagePlaybackStartsToday"
+  | "instructionPlaybackStartsToday";
+export type FrontFrame =
+  | SummaryFrontFrame
   | "clock"
   | "weather";
 export type IdleMode = "weather" | "clock" | "weatherClock" | "telephone" | "all";
@@ -67,6 +74,23 @@ export interface MonitorRender {
   alertKind: "error" | "offline" | "critical" | null;
 }
 
+export const DEFAULT_FRONT_FRAME: SummaryFrontFrame = "interactionsToday";
+
+const BASE_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
+  "interactionsToday",
+  "messagesToday",
+  "interactionsTotal",
+  "messagesTotal",
+];
+
+const BREAKDOWN_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
+  "noSelectionToday",
+  "wrongNumberAttemptsToday",
+  "messagesLeftToday",
+  "messagePlaybackStartsToday",
+  "instructionPlaybackStartsToday",
+];
+
 const COLORS = {
   blueDark: "#003B7AFF",
   amber: "#FAAB00FF",
@@ -86,6 +110,9 @@ const COLORS = {
   white: "#FFFFFFFF",
   transparent: "#00000000",
 } as const;
+
+const PICKUP_FRONT_LABEL = "PICK";
+const PICKUP_REAR_LABEL = "PICKUPS";
 
 type Gradient = readonly [string, string];
 type DisplayElement = DisplayDrawParams["elements"][number];
@@ -289,12 +316,9 @@ export const availableFrontFrames = (
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): FrontFrame[] => {
-  const telephoneFrames: FrontFrame[] = [
-    "callsToday",
-    "messagesToday",
-    "callsTotal",
-    "messagesTotal",
-  ];
+  const telephoneFrames = state.summary?.breakdownToday
+    ? [...BASE_TELEPHONE_FRAMES, ...BREAKDOWN_TELEPHONE_FRAMES]
+    : [...BASE_TELEPHONE_FRAMES];
   const weatherAvailable = Boolean(
     config.weather &&
       state.weather &&
@@ -515,13 +539,26 @@ const backLines = (
   const system = state.system;
   const snapshot = system?.snapshot;
   if (state.backPage === 0) {
+    const age = status ? `${Math.round(ageMs(state.statusReceivedAtMs, nowMs) / 1000)}s` : "--";
     const today = state.summary
-      ? `CALLS ${state.summary.callsToday} MSGS ${state.summary.messagesToday}`
-      : "CALLS -- MSGS --";
+      ? `DAY ${PICKUP_REAR_LABEL} ${summaryCount(state.summary.interactionsToday)} MSGS ${summaryCount(state.summary.messagesToday)}`
+      : `DAY ${PICKUP_REAR_LABEL} -- MSGS --`;
+    const breakdown = state.summary?.breakdownToday;
+    if (breakdown) {
+      return [
+        today,
+        `NO SEL ${summaryCount(breakdown.noSelection)} WRONG ${summaryCount(breakdown.wrongNumberAttempts)}`,
+        `LEFT ${summaryCount(breakdown.messagesLeft)} LISTEN ${summaryCount(breakdown.messagePlaybackStarts)}`,
+        `INSTR ${summaryCount(breakdown.instructionPlaybackStarts)}`,
+        `STATE ${status?.state ?? "--"} AGE ${age}`,
+        `QUESTION ${shortId(status?.currentQuestionId)} MESSAGE ${shortId(status?.currentMessageId)}`,
+        `ERROR ${status?.lastError ?? "CLEAR"} VIEW ${state.idleMode.toUpperCase()}`,
+      ];
+    }
     return [
       today,
       `STATE ${status?.state ?? "--"}`,
-      `AGE ${status ? Math.round(ageMs(state.statusReceivedAtMs, nowMs) / 1000) : "--"}s`,
+      `AGE ${age}`,
       `VIEW ${state.idleMode.toUpperCase()}`,
       `QUESTION ${shortId(status?.currentQuestionId)}`,
       `MESSAGE ${shortId(status?.currentMessageId)}`,
@@ -557,6 +594,9 @@ const backLines = (
 };
 
 const compactCount = (count: number): string => (count > 999 ? "999+" : String(count));
+
+const summaryCount = (count: number | undefined): string =>
+  count === undefined ? "--" : compactCount(count);
 
 const idleModePresentation = (
   mode: IdleMode,
@@ -628,28 +668,121 @@ const sceneAnnouncementPresentation = (
   };
 };
 
+const summaryLabelFont = (label: string): TextElement["font"] =>
+  label.length > 7 ? "condensed" : label.length > 5 ? "small" : "normal";
+
+const summaryCard = (
+  label: string,
+  period: "DAY" | "ALL",
+  rawCount: number | undefined,
+  background: Gradient,
+  accent: string,
+): {
+  label: string;
+  period: "DAY" | "ALL";
+  count: string;
+  background: Gradient;
+  accent: string;
+} => ({
+  label,
+  period,
+  count: summaryCount(rawCount),
+  background,
+  accent,
+});
+
+const summaryFrameCard = (
+  frame: SummaryFrontFrame,
+  summary: MonitorSummary | null,
+): {
+  label: string;
+  period: "DAY" | "ALL";
+  count: string;
+  background: Gradient;
+  accent: string;
+} => {
+  switch (frame) {
+    case "interactionsToday":
+      return summaryCard(
+        PICKUP_FRONT_LABEL,
+        "DAY",
+        summary?.interactionsToday,
+        [COLORS.blueDark, COLORS.cyanDark],
+        COLORS.cyan,
+      );
+    case "messagesToday":
+      return summaryCard(
+        "MSGS",
+        "DAY",
+        summary?.messagesToday,
+        [COLORS.violetDark, COLORS.violet],
+        COLORS.violet,
+      );
+    case "interactionsTotal":
+      return summaryCard(
+        PICKUP_FRONT_LABEL,
+        "ALL",
+        summary?.interactionsTotal,
+        [COLORS.blueDark, COLORS.cyanDark],
+        COLORS.cyan,
+      );
+    case "messagesTotal":
+      return summaryCard(
+        "MSGS",
+        "ALL",
+        summary?.messagesTotal,
+        [COLORS.violetDark, COLORS.violet],
+        COLORS.violet,
+      );
+    case "noSelectionToday":
+      return summaryCard(
+        "NO SEL",
+        "DAY",
+        summary?.breakdownToday?.noSelection,
+        [COLORS.amberDark, COLORS.amber],
+        COLORS.amber,
+      );
+    case "wrongNumberAttemptsToday":
+      return summaryCard(
+        "WRONG",
+        "DAY",
+        summary?.breakdownToday?.wrongNumberAttempts,
+        [COLORS.redDark, COLORS.red],
+        COLORS.red,
+      );
+    case "messagesLeftToday":
+      return summaryCard(
+        "LEFT",
+        "DAY",
+        summary?.breakdownToday?.messagesLeft,
+        [COLORS.violetDark, COLORS.violet],
+        COLORS.violet,
+      );
+    case "messagePlaybackStartsToday":
+      return summaryCard(
+        "LISTEN",
+        "DAY",
+        summary?.breakdownToday?.messagePlaybackStarts,
+        [COLORS.blueDark, COLORS.cyanDark],
+        COLORS.cyan,
+      );
+    case "instructionPlaybackStartsToday":
+      return summaryCard(
+        "INSTR",
+        "DAY",
+        summary?.breakdownToday?.instructionPlaybackStarts,
+        [COLORS.slateDark, COLORS.slate],
+        COLORS.yellow,
+      );
+  }
+};
+
 const summaryPresentation = (
-  frame: Extract<FrontFrame, "callsToday" | "messagesToday" | "callsTotal" | "messagesTotal">,
+  frame: SummaryFrontFrame,
   summary: MonitorSummary | null,
   dark: boolean,
 ): FrontPresentation => {
-  const calls = frame === "callsToday" || frame === "callsTotal";
-  const today = frame === "callsToday" || frame === "messagesToday";
-  const label = calls ? "CALLS" : "MSGS";
-  const rawCount = summary
-    ? calls
-      ? today
-        ? summary.callsToday
-        : summary.callsTotal
-      : today
-        ? summary.messagesToday
-        : summary.messagesTotal
-    : undefined;
-  const count = rawCount === undefined ? "--" : compactCount(rawCount);
-  const background: Gradient = calls
-    ? [COLORS.blueDark, COLORS.cyanDark]
-    : [COLORS.violetDark, COLORS.violet];
-  const accent = calls ? COLORS.cyan : COLORS.violet;
+  const { label, period, count, background, accent } = summaryFrameCard(frame, summary);
   const themedBackground: Gradient = dark
     ? [COLORS.trueBlack, COLORS.trueBlack]
     : background;
@@ -670,13 +803,13 @@ const summaryPresentation = (
         label,
         18,
         1,
-        "normal",
+        summaryLabelFont(label),
         dark ? accent : COLORS.white,
         "top_left",
       ),
       frontText(
         "front-count-period",
-        today ? "DAY" : "ALL",
+        period,
         18,
         10,
         "tiny",
@@ -1033,18 +1166,13 @@ const idlePresentation = (
   const frames = availableFrontFrames(state, config, nowMs);
   const frame = frames.includes(state.frontFrame)
     ? state.frontFrame
-    : (frames[0] ?? "callsToday");
-  if (
-    frame === "callsToday" ||
-    frame === "messagesToday" ||
-    frame === "callsTotal" ||
-    frame === "messagesTotal"
-  ) {
+    : (frames[0] ?? DEFAULT_FRONT_FRAME);
+  if (frame !== "clock" && frame !== "weather") {
     return summaryPresentation(frame, state.summary, dark);
   }
   if (frame === "clock") return clockPresentation(config.timeZone, nowMs, dark);
   if (frame === "weather" && state.weather) return weatherPresentation(state.weather, dark);
-  return summaryPresentation("callsToday", state.summary, dark);
+  return summaryPresentation(DEFAULT_FRONT_FRAME, state.summary, dark);
 };
 
 export const renderMonitor = (

@@ -107,16 +107,85 @@ export const BoothSystemSnapshotEnvelopeSchema = z.object({
 });
 export type BoothSystemSnapshotEnvelope = z.infer<typeof BoothSystemSnapshotEnvelopeSchema>;
 
-export const MonitorSummarySchema = z.object({
-  callsToday: z.number().int().nonnegative(),
-  messagesToday: z.number().int().nonnegative(),
-  callsTotal: z.number().int().nonnegative().optional(),
-  messagesTotal: z.number().int().nonnegative().optional(),
-  dayStartedAt: z.string().datetime(),
-  generatedAt: z.string().datetime(),
-  timeZone: z.string().min(1).max(64),
+export const MonitorBreakdownTodaySchema = z.object({
+  noSelection: z.number().int().nonnegative(),
+  wrongNumberAttempts: z.number().int().nonnegative(),
+  messagesLeft: z.number().int().nonnegative(),
+  messagePlaybackStarts: z.number().int().nonnegative(),
+  instructionPlaybackStarts: z.number().int().nonnegative(),
 });
-export type MonitorSummary = z.infer<typeof MonitorSummarySchema>;
+export type MonitorBreakdownToday = z.infer<typeof MonitorBreakdownTodaySchema>;
+
+export interface MonitorSummary {
+  interactionsToday?: number;
+  messagesToday: number;
+  interactionsTotal?: number;
+  messagesTotal?: number;
+  breakdownToday?: MonitorBreakdownToday;
+  dayStartedAt: string;
+  generatedAt: string;
+  timeZone: string;
+}
+
+export const MonitorSummarySchema = z
+  .object({
+    interactionsToday: z.number().int().nonnegative().optional(),
+    callsToday: z.number().int().nonnegative().optional(),
+    messagesToday: z.number().int().nonnegative(),
+    interactionsTotal: z.number().int().nonnegative().optional(),
+    callsTotal: z.number().int().nonnegative().optional(),
+    messagesTotal: z.number().int().nonnegative().optional(),
+    breakdownToday: MonitorBreakdownTodaySchema.optional(),
+    dayStartedAt: z.string().datetime(),
+    generatedAt: z.string().datetime(),
+    timeZone: z.string().min(1).max(64),
+  })
+  .superRefine((summary, context) => {
+    if (
+      summary.interactionsToday === undefined &&
+      summary.callsToday === undefined &&
+      summary.interactionsTotal === undefined &&
+      summary.callsTotal === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Monitor summary requires interactionsToday/interactionsTotal or legacy callsToday/callsTotal.",
+      });
+    }
+  })
+  .transform((summary): MonitorSummary => {
+    const interactionsToday = summary.interactionsToday ?? summary.callsToday;
+    const interactionsTotal = summary.interactionsTotal ?? summary.callsTotal;
+    const messagesTotal = summary.messagesTotal;
+    const breakdownToday = summary.breakdownToday;
+    return {
+      ...(interactionsToday !== undefined
+        ? {
+            interactionsToday,
+          }
+        : {}),
+      messagesToday: summary.messagesToday,
+      ...(interactionsTotal !== undefined
+        ? {
+            interactionsTotal,
+          }
+        : {}),
+      ...(messagesTotal !== undefined
+        ? {
+            messagesTotal,
+          }
+        : {}),
+      ...(breakdownToday !== undefined
+        ? {
+            breakdownToday,
+          }
+        : {}),
+      dayStartedAt: summary.dayStartedAt,
+      generatedAt: summary.generatedAt,
+      timeZone: summary.timeZone,
+    };
+  });
 
 export const WsEnvelopeSchema = z.discriminatedUnion("kind", [
   z.object({

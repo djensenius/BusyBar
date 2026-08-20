@@ -6,7 +6,7 @@ import type { MonitorConfig } from "./config.js";
 import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream.js";
 import { startBusyBarInputStream } from "./input-stream.js";
 import type { BackPage, IdleMode, MonitorState, SceneAnnouncement } from "./renderer.js";
-import { availableFrontFrames, renderMonitor } from "./renderer.js";
+import { availableFrontFrames, DEFAULT_FRONT_FRAME, renderMonitor } from "./renderer.js";
 import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
 import type { WeatherSnapshot } from "./weather-client.js";
 
@@ -22,7 +22,7 @@ const nextFrontFrame = (
   frames: readonly MonitorState["frontFrame"][],
 ): MonitorState["frontFrame"] => {
   const index = frames.indexOf(current);
-  return frames[(index + 1) % frames.length] ?? frames[0] ?? "callsToday";
+  return frames[(index + 1) % frames.length] ?? frames[0] ?? DEFAULT_FRONT_FRAME;
 };
 
 const IDLE_MODES: readonly IdleMode[] = [
@@ -105,7 +105,7 @@ export class Monitor {
     summary: null,
     weather: null,
     weatherReceivedAtMs: null,
-    frontFrame: "callsToday",
+    frontFrame: DEFAULT_FRONT_FRAME,
     idleMode: "all",
     idleModeAnnouncement: null,
     sceneAnnouncement: null,
@@ -257,7 +257,7 @@ export class Monitor {
       ...this.#state,
       status,
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
-      frontFrame: status.state === "idle" && wasActive ? "callsToday" : this.#state.frontFrame,
+      frontFrame: status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -283,7 +283,7 @@ export class Monitor {
       ...this.#state,
       system,
       systemReceivedAtMs: Math.min(receivedAtMs, Date.now()),
-      frontFrame: recovered ? "callsToday" : this.#state.frontFrame,
+      frontFrame: recovered ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -506,7 +506,7 @@ export class Monitor {
       const frames = availableFrontFrames(state, this.#config, Date.now());
       this.#state = {
         ...state,
-        frontFrame: frames[0] ?? "callsToday",
+        frontFrame: frames[0] ?? DEFAULT_FRONT_FRAME,
         idleModeAnnouncement: idleMode,
       };
       if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
@@ -586,7 +586,7 @@ export class Monitor {
       this.#retryTimer = null;
       await this.#maybeAlert(rendered.alertKind);
       if (wasDisconnected) {
-        this.#state = { ...this.#state, frontFrame: "callsToday" };
+        this.#state = { ...this.#state, frontFrame: DEFAULT_FRONT_FRAME };
         this.#scheduleRender();
       }
     } catch (error) {

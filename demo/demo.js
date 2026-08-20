@@ -199,8 +199,8 @@ const weatherSamples = [
 const designs = [
   {
     kind: "booth",
-    name: "Idle - calls today",
-    label: "CALLS",
+    name: "Idle - pickups today",
+    label: "PICK",
     period: "DAY",
     value: "12",
     start: COLORS.blueDark,
@@ -223,8 +223,8 @@ const designs = [
   },
   {
     kind: "booth",
-    name: "Idle - calls overall",
-    label: "CALLS",
+    name: "Idle - pickups overall",
+    label: "PICK",
     period: "ALL",
     value: "342",
     start: COLORS.blueDark,
@@ -242,6 +242,66 @@ const designs = [
     start: COLORS.violetDark,
     end: COLORS.violet,
     accent: COLORS.violet,
+    accentText: COLORS.black,
+    mode: "idle",
+  },
+  {
+    kind: "booth",
+    name: "Idle - no selection today",
+    label: "NO SEL",
+    period: "DAY",
+    value: "3",
+    start: COLORS.amberDark,
+    end: COLORS.amber,
+    accent: COLORS.amber,
+    accentText: COLORS.black,
+    mode: "idle",
+  },
+  {
+    kind: "booth",
+    name: "Idle - wrong numbers today",
+    label: "WRONG",
+    period: "DAY",
+    value: "5",
+    start: COLORS.redDark,
+    end: COLORS.red,
+    accent: COLORS.red,
+    accentText: COLORS.white,
+    mode: "idle",
+  },
+  {
+    kind: "booth",
+    name: "Idle - messages left today",
+    label: "LEFT",
+    period: "DAY",
+    value: "4",
+    start: COLORS.violetDark,
+    end: COLORS.violet,
+    accent: COLORS.violet,
+    accentText: COLORS.black,
+    mode: "idle",
+  },
+  {
+    kind: "booth",
+    name: "Idle - messages listened today",
+    label: "LISTEN",
+    period: "DAY",
+    value: "7",
+    start: COLORS.blueDark,
+    end: COLORS.cyanDark,
+    accent: COLORS.cyan,
+    accentText: COLORS.black,
+    mode: "idle",
+  },
+  {
+    kind: "booth",
+    name: "Idle - instructions heard today",
+    label: "INSTR",
+    period: "DAY",
+    value: "6",
+    start: COLORS.slateDark,
+    end: COLORS.slate,
+    accent: COLORS.yellow,
     accentText: COLORS.black,
     mode: "idle",
   },
@@ -342,7 +402,9 @@ const drawBoothText = (context, design) => {
   context.fillStyle = COLORS.white;
 
   if (design.value) {
-    context.font = "bold 7px monospace";
+    const labelFontSize =
+      design.label.length > 7 ? 5 : design.label.length > 5 ? 6 : 7;
+    context.font = `bold ${labelFontSize}px monospace`;
     context.textBaseline = "top";
     context.fillText(design.label, 18, 1);
     context.font = "bold 4px monospace";

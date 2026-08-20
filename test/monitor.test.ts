@@ -63,13 +63,24 @@ const system = (): BoothSystemSnapshotEnvelope => ({
 });
 
 const summary = (): MonitorSummary => ({
-  callsToday: 12,
+  interactionsToday: 12,
   messagesToday: 8,
-  callsTotal: 342,
+  interactionsTotal: 342,
   messagesTotal: 187,
   dayStartedAt: "2026-07-31T04:00:00.000Z",
   generatedAt: new Date().toISOString(),
   timeZone: "America/Toronto",
+});
+
+const summaryWithBreakdown = (): MonitorSummary => ({
+  ...summary(),
+  breakdownToday: {
+    noSelection: 3,
+    wrongNumberAttempts: 5,
+    messagesLeft: 4,
+    messagePlaybackStarts: 7,
+    instructionPlaybackStarts: 6,
+  },
 });
 
 const createClient = (): BusyBarDeviceClient & {
@@ -142,7 +153,7 @@ describe("monitor lifecycle", () => {
     monitor.updateStatus({ ...status("idle"), id: 3 });
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "CALLS",
+      "PICK",
       "DAY",
       "12",
     ]);
@@ -159,7 +170,7 @@ describe("monitor lifecycle", () => {
 
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "CALLS",
+      "PICK",
       "DAY",
       "12",
     ]);
@@ -171,10 +182,46 @@ describe("monitor lifecycle", () => {
     ]);
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "CALLS",
+      "PICK",
       "ALL",
       "342",
     ]);
+    await monitor.stop();
+  });
+
+  it("rotates through daily breakout cards only when breakdowns are available", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      { ...config, statusStaleAfterMs: 120_000, systemStaleAfterMs: 120_000 },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summaryWithBreakdown());
+    await monitor.start();
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICK",
+      "DAY",
+      "12",
+    ]);
+    for (const expected of [
+      ["MSGS", "DAY", "8"],
+      ["PICK", "ALL", "342"],
+      ["MSGS", "ALL", "187"],
+      ["NO SEL", "DAY", "3"],
+      ["WRONG", "DAY", "5"],
+      ["LEFT", "DAY", "4"],
+      ["LISTEN", "DAY", "7"],
+      ["INSTR", "DAY", "6"],
+    ]) {
+      await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
+    }
+
     await monitor.stop();
   });
 
@@ -199,7 +246,7 @@ describe("monitor lifecycle", () => {
     monitor.updateStatus({ ...first, repeatCount: 2 });
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "CALLS",
+      "PICK",
       "ALL",
       "--",
     ]);
