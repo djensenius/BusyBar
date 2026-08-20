@@ -83,6 +83,25 @@ const summaryWithBreakdown = (): MonitorSummary => ({
   },
 });
 
+const summaryWithAllTimeListen = (): MonitorSummary => ({
+  ...summaryWithBreakdown(),
+  messagePlaybackStartsTotal: 48,
+});
+
+const summaryWithZeroDailyCards = (): MonitorSummary => ({
+  ...summary(),
+  interactionsToday: 0,
+  messagesToday: 0,
+  messagePlaybackStartsTotal: 0,
+  breakdownToday: {
+    noSelection: 0,
+    wrongNumberAttempts: 0,
+    messagesLeft: 0,
+    messagePlaybackStarts: 0,
+    instructionPlaybackStarts: 0,
+  },
+});
+
 const createClient = (): BusyBarDeviceClient & {
   draw: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
@@ -221,6 +240,97 @@ describe("monitor lifecycle", () => {
         expected,
       );
     }
+
+    await monitor.stop();
+  });
+
+  it("keeps the old-server rotation order when listen-all is unavailable", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      { ...config, statusStaleAfterMs: 120_000, systemStaleAfterMs: 120_000 },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summaryWithBreakdown());
+    await monitor.start();
+
+    for (const expected of [
+      ["PICKUP", "DAY", "12"],
+      ["MSGS", "DAY", "8"],
+      ["PICKUP", "ALL", "342"],
+      ["MSGS", "ALL", "187"],
+      ["NO SEL", "DAY", "3"],
+      ["WRONG", "DAY", "5"],
+      ["LEFT", "DAY", "4"],
+      ["LISTEN", "DAY", "7"],
+      ["INSTR", "DAY", "6"],
+    ]) {
+      await vi.advanceTimersByTimeAsync(
+        expected[0] === "PICKUP" && expected[1] === "DAY"
+          ? config.renderDebounceMs
+          : config.frontRotationMs + config.renderDebounceMs,
+      );
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
+    }
+
+    await monitor.stop();
+  });
+
+  it("adds listen-all for new servers and skips explicit zero daily cards", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      { ...config, statusStaleAfterMs: 120_000, systemStaleAfterMs: 120_000 },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summaryWithAllTimeListen());
+    await monitor.start();
+
+    for (const expected of [
+      ["PICKUP", "DAY", "12"],
+      ["MSGS", "DAY", "8"],
+      ["PICKUP", "ALL", "342"],
+      ["MSGS", "ALL", "187"],
+      ["LISTEN", "ALL", "48"],
+      ["NO SEL", "DAY", "3"],
+      ["WRONG", "DAY", "5"],
+      ["LEFT", "DAY", "4"],
+      ["LISTEN", "DAY", "7"],
+      ["INSTR", "DAY", "6"],
+    ]) {
+      await vi.advanceTimersByTimeAsync(
+        expected[0] === "PICKUP" && expected[1] === "DAY"
+          ? config.renderDebounceMs
+          : config.frontRotationMs + config.renderDebounceMs,
+      );
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
+    }
+
+    monitor.updateSummary(summaryWithZeroDailyCards());
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP",
+      "ALL",
+      "342",
+    ]);
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "MSGS",
+      "ALL",
+      "187",
+    ]);
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "LISTEN",
+      "ALL",
+      "0",
+    ]);
 
     await monitor.stop();
   });

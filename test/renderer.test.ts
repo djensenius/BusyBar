@@ -111,6 +111,52 @@ const breakdownSummary: MonitorSummary = {
   },
 };
 
+const allTimeListenSummary: MonitorSummary = {
+  ...breakdownSummary,
+  messagePlaybackStartsTotal: 48,
+};
+
+const zeroDailySummary: MonitorSummary = {
+  ...summary,
+  interactionsToday: 0,
+  messagesToday: 0,
+  interactionsTotal: 342,
+  messagesTotal: 187,
+  messagePlaybackStartsTotal: 0,
+  breakdownToday: {
+    noSelection: 0,
+    wrongNumberAttempts: 0,
+    messagesLeft: 0,
+    messagePlaybackStarts: 0,
+    instructionPlaybackStarts: 0,
+  },
+};
+
+const mixedZeroDailySummary: MonitorSummary = {
+  ...summary,
+  interactionsToday: 0,
+  messagesToday: 8,
+  interactionsTotal: 342,
+  messagesTotal: 187,
+  messagePlaybackStartsTotal: 48,
+  breakdownToday: {
+    noSelection: 0,
+    wrongNumberAttempts: 5,
+    messagesLeft: 0,
+    messagePlaybackStarts: 7,
+    instructionPlaybackStarts: 0,
+  },
+};
+
+const unknownPickupDaySummary: MonitorSummary = {
+  messagesToday: 8,
+  interactionsTotal: 342,
+  messagesTotal: 187,
+  dayStartedAt: "2026-07-31T04:00:00.000Z",
+  generatedAt: new Date(now - 1_000).toISOString(),
+  timeZone: "America/Toronto",
+};
+
 const weather: WeatherSnapshot = {
   condition: "rainy",
   sunState: "above_horizon",
@@ -199,6 +245,16 @@ describe("monitor renderer", () => {
         "front",
       ),
     ).toEqual(["MSGS", "ALL", "187"]);
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "messagePlaybackStartsTotal", summary: allTimeListenSummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["LISTEN", "ALL", "48"]);
     expect(textsFor(renderMonitor(model(), config, now).payload, "front")).toEqual([
       "PICKUP",
       "DAY",
@@ -216,6 +272,24 @@ describe("monitor renderer", () => {
     expect(frontTextElements(rendered).find((element) => element.text === "PICKUP")).toMatchObject({
       font: "small",
     });
+    expect(frontTextElements(rendered)).toHaveLength(5);
+    expect(frontRectangleElements(rendered)).toHaveLength(24);
+  });
+
+  it("keeps listen-all labels within the supported font and slot limits", () => {
+    const rendered = renderMonitor(
+      model({
+        frontFrame: "messagePlaybackStartsTotal",
+        summary: { ...allTimeListenSummary, messagePlaybackStartsTotal: 0 },
+      }),
+      config,
+      now,
+    ).payload;
+
+    expect(frontTextElements(rendered).find((element) => element.text === "LISTEN")).toMatchObject({
+      font: "small",
+    });
+    expect(textsFor(rendered, "front")).toEqual(["LISTEN", "ALL", "0"]);
     expect(frontTextElements(rendered)).toHaveLength(5);
     expect(frontRectangleElements(rendered)).toHaveLength(24);
   });
@@ -326,6 +400,74 @@ describe("monitor renderer", () => {
       "messagePlaybackStartsToday",
       "instructionPlaybackStartsToday",
     ]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: allTimeListenSummary },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
+      "noSelectionToday",
+      "wrongNumberAttemptsToday",
+      "messagesLeftToday",
+      "messagePlaybackStartsToday",
+      "instructionPlaybackStartsToday",
+    ]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: mixedZeroDailySummary },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
+      "wrongNumberAttemptsToday",
+      "messagePlaybackStartsToday",
+    ]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: zeroDailySummary },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
+    ]);
+    expect(
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary: unknownPickupDaySummary },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+    ]);
+  });
+
+  it("keeps unknown pickup-day summaries available instead of treating them as zero", () => {
+    expect(
+      textsFor(
+        renderMonitor(
+          model({ frontFrame: "interactionsToday", summary: unknownPickupDaySummary }),
+          config,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["PICKUP", "DAY", "--"]);
   });
 
   it("shows a temporary mode confirmation", () => {
@@ -522,6 +664,11 @@ describe("monitor renderer", () => {
       config,
       now,
     ).payload;
+    const listenAll = renderMonitor(
+      model({ frontFrame: "messagePlaybackStartsTotal", summary: allTimeListenSummary }),
+      config,
+      now,
+    ).payload;
     const clock = renderMonitor(model({ frontFrame: "clock" }), config, now).payload;
     const rainy = renderMonitor(
       model({
@@ -533,6 +680,7 @@ describe("monitor renderer", () => {
       now,
     ).payload;
 
+    expect(frontElementIds(listenAll)).toEqual(frontElementIds(calls));
     expect(frontElementIds(clock)).toEqual(frontElementIds(calls));
     expect(frontElementIds(rainy)).toEqual(frontElementIds(calls));
     expect(new Set(frontElementIds(calls)).size).toBe(frontElementIds(calls).length);

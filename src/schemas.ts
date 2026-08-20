@@ -121,6 +121,7 @@ export interface MonitorSummary {
   messagesToday: number;
   interactionsTotal?: number;
   messagesTotal?: number;
+  messagePlaybackStartsTotal?: number;
   breakdownToday?: MonitorBreakdownToday;
   dayStartedAt: string;
   generatedAt: string;
@@ -135,6 +136,7 @@ export const MonitorSummarySchema = z
     interactionsTotal: z.number().int().nonnegative().optional(),
     callsTotal: z.number().int().nonnegative().optional(),
     messagesTotal: z.number().int().nonnegative().optional(),
+    messagePlaybackStartsTotal: z.number().int().nonnegative().optional(),
     breakdownToday: MonitorBreakdownTodaySchema.optional(),
     dayStartedAt: z.string().datetime(),
     generatedAt: z.string().datetime(),
@@ -158,6 +160,7 @@ export const MonitorSummarySchema = z
     const interactionsToday = summary.interactionsToday ?? summary.callsToday;
     const interactionsTotal = summary.interactionsTotal ?? summary.callsTotal;
     const messagesTotal = summary.messagesTotal;
+    const messagePlaybackStartsTotal = summary.messagePlaybackStartsTotal;
     const breakdownToday = summary.breakdownToday;
     return {
       ...(interactionsToday !== undefined
@@ -174,6 +177,11 @@ export const MonitorSummarySchema = z
       ...(messagesTotal !== undefined
         ? {
             messagesTotal,
+          }
+        : {}),
+      ...(messagePlaybackStartsTotal !== undefined
+        ? {
+            messagePlaybackStartsTotal,
           }
         : {}),
       ...(breakdownToday !== undefined

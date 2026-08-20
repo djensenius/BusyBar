@@ -27,6 +27,7 @@ export type SummaryFrontFrame =
   | "messagesToday"
   | "interactionsTotal"
   | "messagesTotal"
+  | "messagePlaybackStartsTotal"
   | "noSelectionToday"
   | "wrongNumberAttemptsToday"
   | "messagesLeftToday"
@@ -83,12 +84,13 @@ const BASE_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
   "messagesTotal",
 ];
 
-const BREAKDOWN_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
-  "noSelectionToday",
-  "wrongNumberAttemptsToday",
-  "messagesLeftToday",
-  "messagePlaybackStartsToday",
-  "instructionPlaybackStartsToday",
+const CORE_ALL_TIME_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
+  "interactionsTotal",
+  "messagesTotal",
+];
+
+const OPTIONAL_ALL_TIME_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
+  "messagePlaybackStartsTotal",
 ];
 
 const COLORS = {
@@ -316,8 +318,44 @@ export const availableFrontFrames = (
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): FrontFrame[] => {
-  const telephoneFrames = state.summary?.breakdownToday
-    ? [...BASE_TELEPHONE_FRAMES, ...BREAKDOWN_TELEPHONE_FRAMES]
+  const telephoneFrames = state.summary
+    ? [
+        ...(state.summary.interactionsToday === 0
+          ? []
+          : (["interactionsToday"] satisfies SummaryFrontFrame[])),
+        ...(state.summary.messagesToday === 0
+          ? []
+          : (["messagesToday"] satisfies SummaryFrontFrame[])),
+        ...CORE_ALL_TIME_TELEPHONE_FRAMES,
+        ...(state.summary.messagePlaybackStartsTotal === undefined
+          ? []
+          : OPTIONAL_ALL_TIME_TELEPHONE_FRAMES),
+        ...(state.summary.breakdownToday?.noSelection === 0
+          ? []
+          : state.summary.breakdownToday
+            ? (["noSelectionToday"] satisfies SummaryFrontFrame[])
+            : []),
+        ...(state.summary.breakdownToday?.wrongNumberAttempts === 0
+          ? []
+          : state.summary.breakdownToday
+            ? (["wrongNumberAttemptsToday"] satisfies SummaryFrontFrame[])
+            : []),
+        ...(state.summary.breakdownToday?.messagesLeft === 0
+          ? []
+          : state.summary.breakdownToday
+            ? (["messagesLeftToday"] satisfies SummaryFrontFrame[])
+            : []),
+        ...(state.summary.breakdownToday?.messagePlaybackStarts === 0
+          ? []
+          : state.summary.breakdownToday
+            ? (["messagePlaybackStartsToday"] satisfies SummaryFrontFrame[])
+            : []),
+        ...(state.summary.breakdownToday?.instructionPlaybackStarts === 0
+          ? []
+          : state.summary.breakdownToday
+            ? (["instructionPlaybackStartsToday"] satisfies SummaryFrontFrame[])
+            : []),
+      ]
     : [...BASE_TELEPHONE_FRAMES];
   const weatherAvailable = Boolean(
     config.weather &&
@@ -733,6 +771,14 @@ const summaryFrameCard = (
         summary?.messagesTotal,
         [COLORS.violetDark, COLORS.violet],
         COLORS.violet,
+      );
+    case "messagePlaybackStartsTotal":
+      return summaryCard(
+        "LISTEN",
+        "ALL",
+        summary?.messagePlaybackStartsTotal,
+        [COLORS.blueDark, COLORS.cyanDark],
+        COLORS.cyan,
       );
     case "noSelectionToday":
       return summaryCard(
