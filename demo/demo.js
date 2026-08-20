@@ -37,11 +37,7 @@ const weatherStyle = (condition) => {
       accentText: "#06131d",
     };
   }
-  if (
-    condition === "rainy" ||
-    condition === "pouring" ||
-    condition === "lightning-rainy"
-  ) {
+  if (condition === "rainy" || condition === "pouring" || condition === "lightning-rainy") {
     return {
       start: COLORS.blueDark,
       end: COLORS.cyanDark,
@@ -49,11 +45,7 @@ const weatherStyle = (condition) => {
       accentText: "#03151e",
     };
   }
-  if (
-    condition === "snowy" ||
-    condition === "snowy-rainy" ||
-    condition === "hail"
-  ) {
+  if (condition === "snowy" || condition === "snowy-rainy" || condition === "hail") {
     return {
       start: COLORS.slateDark,
       end: COLORS.slate,
@@ -318,6 +310,56 @@ const designs = [
     mode: "idle",
   },
   {
+    kind: "vital",
+    metric: "fan",
+    name: "Booth vital - fan cooling",
+    label: "FAN",
+    detail: "MEDIUM",
+    ratio: 0.4,
+    start: COLORS.blueDark,
+    end: COLORS.cyanDark,
+    accent: COLORS.cyan,
+    accentText: COLORS.black,
+  },
+  {
+    kind: "vital",
+    metric: "temperature",
+    name: "Booth vital - Pi CPU temperature",
+    label: "PI",
+    detail: "CPU TEMP",
+    value: "49",
+    degree: true,
+    start: COLORS.violetDark,
+    end: COLORS.slate,
+    accent: COLORS.ice,
+    accentText: "#153d49",
+  },
+  {
+    kind: "vital",
+    metric: "battery",
+    name: "Booth vital - router battery",
+    label: "BATTERY",
+    detail: "ROUTER",
+    value: "78%",
+    start: COLORS.slateDark,
+    end: COLORS.slate,
+    accent: COLORS.yellow,
+    accentText: "#2a1b00",
+  },
+  {
+    kind: "vital",
+    metric: "temperature",
+    name: "Booth vital - router battery temperature",
+    label: "BAT TEMP",
+    detail: "ROUTER",
+    value: "32",
+    degree: true,
+    start: COLORS.amberDark,
+    end: COLORS.slate,
+    accent: COLORS.amber,
+    accentText: "#2a1b00",
+  },
+  {
     kind: "clock",
     name: "Clock - 24 hour",
     start: COLORS.blueDark,
@@ -414,8 +456,7 @@ const drawBoothText = (context, design) => {
   context.fillStyle = COLORS.white;
 
   if (design.value) {
-    const labelFontSize =
-      design.label.length > 7 ? 5 : design.label.length > 5 ? 6 : 7;
+    const labelFontSize = design.label.length > 7 ? 5 : design.label.length > 5 ? 6 : 7;
     context.font = `bold ${labelFontSize}px monospace`;
     context.textBaseline = "top";
     context.fillText(design.label, 18, 1);
@@ -426,8 +467,7 @@ const drawBoothText = (context, design) => {
     context.fillRect(53, 0, 19, 16);
     context.fillStyle = design.accentText;
     context.textBaseline = "middle";
-    context.font =
-      design.value.length > 2 ? "bold 7px monospace" : "bold 10px monospace";
+    context.font = design.value.length > 2 ? "bold 7px monospace" : "bold 10px monospace";
     context.textAlign = "center";
     context.fillText(design.value, 62.5, 8);
     return;
@@ -444,6 +484,87 @@ const drawDegree = (context, x, y, color) => {
   context.fillRect(x, y + 1, 1, 2);
   context.fillRect(x + 3, y + 1, 1, 2);
   context.fillRect(x + 1, y + 3, 2, 1);
+};
+
+const drawFanGauge = (context, ratio, color) => {
+  const ticks = [
+    [55, 9, 2, 4],
+    [57, 4, 3, 2],
+    [62, 2, 4, 2],
+    [68, 5, 2, 5],
+  ];
+  const step = Math.min(4, Math.ceil(Math.max(0, Math.min(1, ratio)) * 4));
+  const needleByStep = [
+    [[61, 11, 3, 3]],
+    [
+      [61, 11, 3, 3],
+      [59, 9, 2, 2],
+      [58, 7, 2, 2],
+      [57, 5, 2, 2],
+    ],
+    [
+      [61, 11, 3, 3],
+      [60, 9, 2, 2],
+      [59, 7, 2, 2],
+      [59, 5, 2, 2],
+    ],
+    [
+      [61, 11, 3, 3],
+      [63, 8, 2, 3],
+      [65, 5, 2, 3],
+    ],
+    [
+      [61, 11, 3, 3],
+      [64, 10, 5, 2],
+    ],
+  ];
+  context.fillStyle = color;
+  for (const [x, y, width, height] of [
+    ...ticks.slice(0, step),
+    ...(needleByStep[step] ?? needleByStep[0]),
+  ]) {
+    context.fillRect(x, y, width, height);
+  }
+};
+
+const drawVital = (context, design) => {
+  context.fillStyle = design.accent;
+  context.fillRect(53, 0, 19, 16);
+  context.fillStyle = design.start;
+  context.fillRect(52, 0, 1, 16);
+
+  context.fillStyle = COLORS.white;
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.font = `bold ${design.label.length > 7 ? 5 : design.label.length > 5 ? 6 : 8}px monospace`;
+  context.fillText(design.label, 18, 1);
+  context.font = "bold 4px monospace";
+  context.fillText(design.detail, 18, 10);
+
+  if (design.metric === "fan") {
+    drawFanGauge(context, design.ratio, design.accentText);
+    return;
+  }
+
+  context.fillStyle = design.accentText;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font =
+    design.value.length > 3
+      ? "bold 5px monospace"
+      : design.value.length > 2
+        ? "bold 7px monospace"
+        : "bold 10px monospace";
+  const centerX = design.degree ? 61 : 62.5;
+  context.fillText(design.value, centerX, 8);
+  if (design.degree) {
+    drawDegree(
+      context,
+      Math.min(68, Math.round(centerX + design.value.length * 3)),
+      3,
+      design.accentText,
+    );
+  }
 };
 
 const drawClock = (context, design) => {
@@ -685,7 +806,7 @@ const drawWeather = (context, design, blink) => {
     context.textAlign = "right";
     context.font = "bold 7px monospace";
     context.fillText(design.detail.high, 70, 0);
-    context.fillText(design.detail.low, 70, 9);
+    context.fillText(design.detail.low, 70, 8);
     return;
   }
 
@@ -773,7 +894,11 @@ const render = (canvas, design, blink) => {
 
   context.fillStyle = gradient(context, design.start, design.end);
   context.fillRect(0, 0, 72, 16);
-  drawBooth(context, design.mode, blink);
+  drawBooth(context, design.mode ?? "idle", blink);
+  if (design.kind === "vital") {
+    drawVital(context, design);
+    return;
+  }
   drawBoothText(context, design);
 };
 

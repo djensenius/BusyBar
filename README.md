@@ -4,9 +4,9 @@ Standalone physical status monitor for the
 [Telephone-Booth](https://github.com/djensenius/Telephone-Booth) art
 installation. It reads the authenticated
 [Telephone-Booth Operator](https://github.com/djensenius/Telephone-Booth-Operator)
-API and renders booth state, today/overall counters, time, optional weather, and system
-health through BUSY Cloud, with automatic LAN failover when the local device URL
-and access key are configured.
+API and renders booth state, today/overall counters, booth hardware vitals, time,
+optional weather, and system health through BUSY Cloud, with automatic LAN
+failover when the local device URL and access key are configured.
 
 The service is deliberately independent of the Operator deployment. Run one
 instance on an always-on home server, Portainer host, or cloud container.
@@ -30,6 +30,9 @@ gradient cards:
 - When the Operator summary includes `messagePlaybackStartsTotal`, `LISTEN / ALL / n`
 - When the Operator summary includes `breakdownToday`, daily `NO SEL`,
   `WRONG`, `LEFT`, `LISTEN`, and `INSTR` cards
+- Fresh booth telemetry adds a fan cooling gauge and the Pi CPU temperature
+- Fresh router component telemetry adds battery charge and battery temperature
+  cards
 - Any rendered `DAY` card with an explicit value of `0` is omitted
 - Unknown or missing pickup day totals still render as unavailable (`--`),
   while an absent `breakdownToday` block continues to hide the five breakout
@@ -45,14 +48,20 @@ Live booth activity interrupts the carousel immediately with `CALLING`, `PLAYING
 
 Pickup, message, breakout, and active-state cards use Canadian
 telephone-booth pixel art.
+The four hardware cards use the same booth art. The fan card maps commanded PWM
+or cooling state to `OFF`, `LOW`, `MEDIUM`, `HIGH`, or `MAX` and deliberately
+does not display tachometer RPM. Pi and router temperatures are rounded to whole
+degrees on the front; the rear keeps decimal precision.
 Weather uses condition-specific artwork for every Home Assistant weather state.
 Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
 
 ## Rear display
 
-The rear display keeps the existing booth overview, system, and network pages,
-and adds a `SMART HOME` page. When the Operator summary includes
+The rear display keeps the booth overview, vitals, network, and `SMART HOME`
+pages. The vitals page combines a radial fan gauge with Pi temperature, CPU,
+memory, and uptime plus router battery charge, temperature, voltage, and
+current. When the Operator summary includes
 `breakdownToday`, the booth overview compacts the current-day pickup
 breakout onto the rear page while still showing live booth details. The smart
 home page shows the Start and dial scene mappings, whether the configured
@@ -76,19 +85,19 @@ No inbound ports or database access are required.
 
 Create a stack from [`compose.yaml`](compose.yaml), then define:
 
-| Variable                        | Value                                      |
-| ------------------------------- | ------------------------------------------ |
-| `BUSY_BAR_CLOUD_TOKEN`          | BUSY Cloud token                           |
-| `BUSY_BAR_OPERATOR_API_URL`     | Operator origin, without `/v1`             |
-| `BUSY_BAR_OPERATOR_TOKEN`       | Monitor-scoped Operator token              |
-| `BUSY_BAR_BOOTH_ID`             | Usually `booth-01`                         |
-| `BUSY_BAR_LOCAL_URL`            | Optional LAN URL for input and display failover |
-| `BUSY_BAR_LOCAL_ACCESS_KEY`     | Password for the BUSY Bar LAN API          |
-| `BUSY_BAR_START_SCENE_ID`       | Scene for Start/Pause, such as `scene.comfy` |
-| `BUSY_BAR_DIAL_SCENE_ID`        | Scene for dial press, such as `scene.good_night` |
-| `BUSY_BAR_WEATHER_ENABLED`      | Set `true` to add Home Assistant weather   |
-| `BUSY_BAR_HOME_ASSISTANT_URL`   | Home Assistant origin                      |
-| `BUSY_BAR_HOME_ASSISTANT_TOKEN` | Home Assistant long-lived access token    |
+| Variable                          | Value                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `BUSY_BAR_CLOUD_TOKEN`            | BUSY Cloud token                                                         |
+| `BUSY_BAR_OPERATOR_API_URL`       | Operator origin, without `/v1`                                           |
+| `BUSY_BAR_OPERATOR_TOKEN`         | Monitor-scoped Operator token                                            |
+| `BUSY_BAR_BOOTH_ID`               | Usually `booth-01`                                                       |
+| `BUSY_BAR_LOCAL_URL`              | Optional LAN URL for input and display failover                          |
+| `BUSY_BAR_LOCAL_ACCESS_KEY`       | Password for the BUSY Bar LAN API                                        |
+| `BUSY_BAR_START_SCENE_ID`         | Scene for Start/Pause, such as `scene.comfy`                             |
+| `BUSY_BAR_DIAL_SCENE_ID`          | Scene for dial press, such as `scene.good_night`                         |
+| `BUSY_BAR_WEATHER_ENABLED`        | Set `true` to add Home Assistant weather                                 |
+| `BUSY_BAR_HOME_ASSISTANT_URL`     | Home Assistant origin                                                    |
+| `BUSY_BAR_HOME_ASSISTANT_TOKEN`   | Home Assistant long-lived access token                                   |
 | `BUSY_BAR_START_TOGGLE_LIGHT_IDS` | Optional comma-separated lights turned off by a second Start/Pause press |
 
 Deploy exactly one replica. The container exposes no ports.
@@ -117,8 +126,8 @@ on.
 
 ### Updating an existing Portainer stack
 
-1. Deploy the matching Operator release first so
-   `GET /v1/monitor/summary` is available.
+1. Deploy the matching Operator release first so `GET /v1/monitor/summary` and
+   monitor-scoped access to `GET /v1/system/components/current` are available.
 2. In Portainer, replace any service that uses the Operator API image and
    `node dist/busy-bar-worker.js` with [`compose.yaml`](compose.yaml).
 3. Keep the existing BUSY Cloud token, then set the Operator URL, a
@@ -157,6 +166,8 @@ See [`.env.example`](.env.example) for every setting. Notable defaults:
   seconds.
 - System telemetry is stale after 20 seconds because snapshots normally arrive
   every five seconds.
+- Router battery telemetry leaves the carousel after five minutes without a new
+  component snapshot.
 - Today counters reset in `America/Toronto`; total counters cover the active installation.
 - Counter summaries refresh every 30 seconds.
 - The clock uses 24-hour time and can be disabled with

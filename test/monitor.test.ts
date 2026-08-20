@@ -12,7 +12,12 @@ import {
   sceneAnnouncementLabel,
   sceneIdForButton,
 } from "../src/monitor.js";
-import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
+import type {
+  BoothStatus,
+  BoothSystemSnapshotEnvelope,
+  MonitorSummary,
+  RouterTelemetryEnvelope,
+} from "../src/schemas.js";
 import type { WeatherSnapshot } from "../src/weather-client.js";
 
 const config: Extract<MonitorConfig, { enabled: true }> = {
@@ -60,6 +65,22 @@ const system = (): BoothSystemSnapshotEnvelope => ({
   snapshot: { temperatureCelsius: 45 },
   receivedAt: new Date().toISOString(),
   version: "0.3.2",
+});
+
+const routerTelemetry = (): RouterTelemetryEnvelope => ({
+  boothId: "booth-01",
+  componentId: "router",
+  displayName: "Travel router",
+  latestSnapshot: {
+    battery: {
+      chargePercent: 78,
+      temperatureCelsius: 31.5,
+      voltageVolts: 3.88,
+      currentAmperes: -0.42,
+    },
+  },
+  capturedAt: new Date().toISOString(),
+  receivedAt: new Date().toISOString(),
 });
 
 const summary = (): MonitorSummary => ({
@@ -208,6 +229,50 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("rotates through fresh fan, Pi, and router battery vitals", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      { ...config, statusStaleAfterMs: 120_000, systemStaleAfterMs: 120_000 },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem({
+      ...system(),
+      snapshot: {
+        temperatureCelsius: 48.5,
+        fan: {
+          commandedOn: true,
+          pwmRatio: 0.4,
+          coolingState: 2,
+          maxCoolingState: 4,
+        },
+      },
+    });
+    monitor.updateRouterTelemetry(routerTelemetry());
+    monitor.updateSummary(summary());
+    await monitor.start();
+
+    for (const expected of [
+      ["PICKUP", "DAY", "12"],
+      ["MSGS", "DAY", "8"],
+      ["PICKUP", "ALL", "342"],
+      ["MSGS", "ALL", "187"],
+      ["FAN", "MEDIUM"],
+      ["PI", "CPU TEMP", "49"],
+      ["BATTERY", "ROUTER", "78%"],
+      ["BAT TEMP", "ROUTER", "32"],
+    ]) {
+      await vi.advanceTimersByTimeAsync(
+        expected[0] === "PICKUP" && expected[1] === "DAY"
+          ? config.renderDebounceMs
+          : config.frontRotationMs + config.renderDebounceMs,
+      );
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
+    }
+
+    await monitor.stop();
+  });
+
   it("rotates through daily breakout cards only when breakdowns are available", async () => {
     const client = createClient();
     const monitor = new Monitor(
@@ -236,9 +301,7 @@ describe("monitor lifecycle", () => {
       ["INSTR", "DAY", "6"],
     ]) {
       await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
-        expected,
-      );
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
     }
 
     await monitor.stop();
@@ -271,9 +334,7 @@ describe("monitor lifecycle", () => {
           ? config.renderDebounceMs
           : config.frontRotationMs + config.renderDebounceMs,
       );
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
-        expected,
-      );
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
     }
 
     await monitor.stop();
@@ -307,9 +368,7 @@ describe("monitor lifecycle", () => {
           ? config.renderDebounceMs
           : config.frontRotationMs + config.renderDebounceMs,
       );
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
-        expected,
-      );
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
     }
 
     monitor.updateSummary(summaryWithZeroDailyCards());

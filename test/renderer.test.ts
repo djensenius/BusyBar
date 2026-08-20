@@ -3,7 +3,12 @@ import { describe, expect, it } from "vite-plus/test";
 import type { MonitorConfig } from "../src/config.js";
 import type { MonitorState } from "../src/renderer.js";
 import { availableFrontFrames, renderMonitor } from "../src/renderer.js";
-import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "../src/schemas.js";
+import type {
+  BoothStatus,
+  BoothSystemSnapshotEnvelope,
+  MonitorSummary,
+  RouterTelemetryEnvelope,
+} from "../src/schemas.js";
 import { WeatherConditionSchema } from "../src/weather-client.js";
 import type { WeatherSnapshot } from "../src/weather-client.js";
 
@@ -88,6 +93,38 @@ const system: BoothSystemSnapshotEnvelope = {
   },
   receivedAt: new Date(now - 1_000).toISOString(),
   version: "0.3.2",
+};
+
+const vitalsSystem: BoothSystemSnapshotEnvelope = {
+  ...system,
+  snapshot: {
+    ...system.snapshot,
+    temperatureCelsius: 48.5,
+    fan: {
+      commandedOn: true,
+      pwmRatio: 0.4,
+      rpm: 4_250,
+      coolingState: 2,
+      maxCoolingState: 4,
+    },
+    uptimeSeconds: 3 * 86_400 + 4 * 3_600 + 15 * 60,
+  },
+};
+
+const routerTelemetry: RouterTelemetryEnvelope = {
+  boothId: "booth-01",
+  componentId: "router",
+  displayName: "Travel router",
+  latestSnapshot: {
+    battery: {
+      chargePercent: 78,
+      temperatureCelsius: 31.5,
+      voltageVolts: 3.88,
+      currentAmperes: -0.42,
+    },
+  },
+  capturedAt: new Date(now - 1_000).toISOString(),
+  receivedAt: new Date(now - 1_000).toISOString(),
 };
 
 const summary: MonitorSummary = {
@@ -175,6 +212,8 @@ const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   statusReceivedAtMs: now - 1_000,
   system,
   systemReceivedAtMs: now - 1_000,
+  routerTelemetry: null,
+  routerTelemetryReceivedAtMs: null,
   summary: null,
   weather: null,
   weatherReceivedAtMs: null,
@@ -208,15 +247,11 @@ const frontRectangleElements = (payload: DisplayDrawParams): RectangleElement[] 
   );
 
 const frontElementIds = (payload: DisplayDrawParams): string[] =>
-  payload.elements
-    .filter((element) => element.display === "front")
-    .map((element) => element.id);
+  payload.elements.filter((element) => element.display === "front").map((element) => element.id);
 
 const frontFillColors = (payload: DisplayDrawParams): string[] =>
   payload.elements.flatMap((element) =>
-    element.display === "front" && element.type === "rectangle"
-      ? element.fill_colors
-      : [],
+    element.display === "front" && element.type === "rectangle" ? element.fill_colors : [],
   );
 
 describe("monitor renderer", () => {
@@ -355,6 +390,10 @@ describe("monitor renderer", () => {
 
   it("filters carousel frames by the selected idle mode", () => {
     const state = model({
+      system: {
+        ...system,
+        snapshot: { ...system.snapshot, temperatureCelsius: null },
+      },
       weather,
       weatherReceivedAtMs: now - 1_000,
     });
@@ -365,24 +404,11 @@ describe("monitor renderer", () => {
       availableFrontFrames({ ...state, idleMode: "clock" }, weatherEnabledConfig, now),
     ).toEqual(["clock"]);
     expect(
-      availableFrontFrames(
-        { ...state, idleMode: "weatherClock" },
-        weatherEnabledConfig,
-        now,
-      ),
+      availableFrontFrames({ ...state, idleMode: "weatherClock" }, weatherEnabledConfig, now),
     ).toEqual(["weather", "clock"]);
     expect(
-      availableFrontFrames(
-        { ...state, idleMode: "telephone", summary },
-        weatherEnabledConfig,
-        now,
-      ),
-    ).toEqual([
-      "interactionsToday",
-      "messagesToday",
-      "interactionsTotal",
-      "messagesTotal",
-    ]);
+      availableFrontFrames({ ...state, idleMode: "telephone", summary }, weatherEnabledConfig, now),
+    ).toEqual(["interactionsToday", "messagesToday", "interactionsTotal", "messagesTotal"]);
     expect(
       availableFrontFrames(
         { ...state, idleMode: "telephone", summary: breakdownSummary },
@@ -438,23 +464,106 @@ describe("monitor renderer", () => {
         weatherEnabledConfig,
         now,
       ),
-    ).toEqual([
-      "interactionsTotal",
-      "messagesTotal",
-      "messagePlaybackStartsTotal",
-    ]);
+    ).toEqual(["interactionsTotal", "messagesTotal", "messagePlaybackStartsTotal"]);
     expect(
       availableFrontFrames(
         { ...state, idleMode: "telephone", summary: unknownPickupDaySummary },
         weatherEnabledConfig,
         now,
       ),
-    ).toEqual([
-      "interactionsToday",
-      "messagesToday",
-      "interactionsTotal",
-      "messagesTotal",
+    ).toEqual(["interactionsToday", "messagesToday", "interactionsTotal", "messagesTotal"]);
+  });
+
+  it("adds booth vitals with a visual fan gauge and numeric temperature cards", () => {
+    const state = model({
+      idleMode: "telephone",
+      summary,
+      system: vitalsSystem,
+      routerTelemetry,
+      routerTelemetryReceivedAtMs: now - 1_000,
+    });
+    expect(availableFrontFrames(state, config, now).slice(-4)).toEqual([
+      "fanCooling",
+      "piCpuTemperature",
+      "routerBatteryCharge",
+      "routerBatteryTemperature",
     ]);
+
+    const fan = renderMonitor({ ...state, frontFrame: "fanCooling" }, config, now).payload;
+    expect(textsFor(fan, "front")).toEqual(["FAN", "MEDIUM"]);
+    expect(textsFor(fan, "front")).not.toContain("4250");
+    expect(frontRectangleElements(fan)).toHaveLength(24);
+
+    const pi = renderMonitor({ ...state, frontFrame: "piCpuTemperature" }, config, now).payload;
+    expect(textsFor(pi, "front")).toEqual(["PI", "CPU TEMP", "49"]);
+
+    const battery = renderMonitor(
+      { ...state, frontFrame: "routerBatteryCharge" },
+      config,
+      now,
+    ).payload;
+    expect(textsFor(battery, "front")).toEqual(["BATTERY", "ROUTER", "78%"]);
+
+    const batteryTemperature = renderMonitor(
+      { ...state, frontFrame: "routerBatteryTemperature" },
+      config,
+      now,
+    ).payload;
+    expect(textsFor(batteryTemperature, "front")).toEqual(["BAT TEMP", "ROUTER", "32"]);
+  });
+
+  it("drops stale booth vitals from the carousel", () => {
+    const frames = availableFrontFrames(
+      model({
+        idleMode: "telephone",
+        system: vitalsSystem,
+        systemReceivedAtMs: now - config.systemStaleAfterMs - 1,
+        routerTelemetry,
+        routerTelemetryReceivedAtMs: now - 5 * 60_000 - 1,
+      }),
+      config,
+      now,
+    );
+
+    expect(frames).not.toContain("fanCooling");
+    expect(frames).not.toContain("piCpuTemperature");
+    expect(frames).not.toContain("routerBatteryCharge");
+    expect(frames).not.toContain("routerBatteryTemperature");
+  });
+
+  it("shows fan, Pi, and router battery details on the rear vitals page", () => {
+    const rendered = renderMonitor(
+      model({
+        backPage: 1,
+        system: vitalsSystem,
+        routerTelemetry,
+        routerTelemetryReceivedAtMs: now - 1_000,
+      }),
+      config,
+      now,
+    ).payload;
+
+    expect(textsFor(rendered, "back")).toEqual([
+      "BOOTH VITALS",
+      "FAN",
+      "MEDIUM",
+      "PI",
+      "48.5 C",
+      "CPU 20%",
+      "MEM 50%",
+      "UP 3D 4H",
+      "ROUTER",
+      "78%",
+      "BATTERY",
+      "TEMP 31.5 C",
+      "VOLT 3.88 V",
+      "CURR -0.42 A",
+    ]);
+    expect(
+      rendered.elements.filter(
+        (element) => element.display === "back" && element.type === "rectangle",
+      ),
+    ).toHaveLength(18);
   });
 
   it("keeps unknown pickup-day summaries available instead of treating them as zero", () => {
@@ -566,7 +675,10 @@ describe("monitor renderer", () => {
 
   it("shows a compact daily pickup breakout on the rear overview", () => {
     expect(
-      textsFor(renderMonitor(model({ summary: breakdownSummary }), smartHomeConfig, now).payload, "back"),
+      textsFor(
+        renderMonitor(model({ summary: breakdownSummary }), smartHomeConfig, now).payload,
+        "back",
+      ),
     ).toEqual([
       "DAY PICKUPS 12 MSGS 8",
       "NO SEL 3 WRONG 5",
@@ -611,24 +723,21 @@ describe("monitor renderer", () => {
         "front",
       ),
     ).toEqual(["6", "FEELS", "11"]);
-    expect(
-      textsFor(
-        renderMonitor(
-          model({
-            frontFrame: "weather",
-            weather: {
-              ...weather,
-              feelsLikeCelsius: 7,
-              precipitationProbability: 20,
-            },
-            weatherReceivedAtMs: now - 1_000,
-          }),
-          weatherEnabledConfig,
-          now,
-        ).payload,
-        "front",
-      ),
-    ).toEqual(["6", "H", "8", "L", "1"]);
+    const highLow = renderMonitor(
+      model({
+        frontFrame: "weather",
+        weather: {
+          ...weather,
+          feelsLikeCelsius: 7,
+          precipitationProbability: 20,
+        },
+        weatherReceivedAtMs: now - 1_000,
+      }),
+      weatherEnabledConfig,
+      now,
+    ).payload;
+    expect(textsFor(highLow, "front")).toEqual(["6", "H", "8", "L", "1"]);
+    expect(frontTextElements(highLow).find((element) => element.text === "1")?.y).toBe(8);
     expect(
       textsFor(
         renderMonitor(

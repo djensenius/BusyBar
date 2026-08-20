@@ -7,7 +7,12 @@ import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream
 import { startBusyBarInputStream } from "./input-stream.js";
 import type { BackPage, IdleMode, MonitorState, SceneAnnouncement } from "./renderer.js";
 import { availableFrontFrames, DEFAULT_FRONT_FRAME, renderMonitor } from "./renderer.js";
-import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
+import type {
+  BoothStatus,
+  BoothSystemSnapshotEnvelope,
+  MonitorSummary,
+  RouterTelemetryEnvelope,
+} from "./schemas.js";
 import type { WeatherSnapshot } from "./weather-client.js";
 
 const BACK_PAGE_COUNT = 4;
@@ -27,18 +32,12 @@ const nextFrontFrame = (
   return frames[(currentIndex + 1) % frames.length] ?? frames[0] ?? DEFAULT_FRONT_FRAME;
 };
 
-const IDLE_MODES: readonly IdleMode[] = [
-  "weather",
-  "clock",
-  "weatherClock",
-  "telephone",
-  "all",
-];
+const IDLE_MODES: readonly IdleMode[] = ["weather", "clock", "weatherClock", "telephone", "all"];
 
 export const nextIdleMode = (current: IdleMode, direction: number): IdleMode => {
   const index = IDLE_MODES.indexOf(current);
-  const next = (((index + (direction > 0 ? 1 : -1)) % IDLE_MODES.length) +
-    IDLE_MODES.length) %
+  const next =
+    (((index + (direction > 0 ? 1 : -1)) % IDLE_MODES.length) + IDLE_MODES.length) %
     IDLE_MODES.length;
   return IDLE_MODES[next] ?? "all";
 };
@@ -104,6 +103,8 @@ export class Monitor {
     statusReceivedAtMs: null,
     system: null,
     systemReceivedAtMs: null,
+    routerTelemetry: null,
+    routerTelemetryReceivedAtMs: null,
     summary: null,
     weather: null,
     weatherReceivedAtMs: null,
@@ -141,6 +142,8 @@ export class Monitor {
   #statusSourceSignature: string | null = null;
   #systemSourceAtMs: number | null = null;
   #systemSourceSignature: string | null = null;
+  #routerTelemetrySourceAtMs: number | null = null;
+  #routerTelemetrySourceSignature: string | null = null;
   #summarySourceAtMs: number | null = null;
   #brightnessValue: number | "auto" | null = null;
   #brightnessUpdating = false;
@@ -259,7 +262,8 @@ export class Monitor {
       ...this.#state,
       status,
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
-      frontFrame: status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
+      frontFrame:
+        status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -286,6 +290,33 @@ export class Monitor {
       system,
       systemReceivedAtMs: Math.min(receivedAtMs, Date.now()),
       frontFrame: recovered ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
+    };
+    this.#scheduleRender();
+  }
+
+  updateRouterTelemetry(routerTelemetry: RouterTelemetryEnvelope, receivedAtMs = Date.now()): void {
+    const reportedAtMs = Date.parse(routerTelemetry.receivedAt ?? routerTelemetry.capturedAt ?? "");
+    const sourceAtMs = Math.min(
+      Number.isFinite(reportedAtMs) ? reportedAtMs : receivedAtMs,
+      receivedAtMs,
+      Date.now(),
+    );
+    const sourceSignature = JSON.stringify(routerTelemetry);
+    if (this.#routerTelemetrySourceAtMs !== null && sourceAtMs < this.#routerTelemetrySourceAtMs) {
+      return;
+    }
+    if (
+      sourceAtMs === this.#routerTelemetrySourceAtMs &&
+      sourceSignature === this.#routerTelemetrySourceSignature
+    ) {
+      return;
+    }
+    this.#routerTelemetrySourceAtMs = sourceAtMs;
+    this.#routerTelemetrySourceSignature = sourceSignature;
+    this.#state = {
+      ...this.#state,
+      routerTelemetry,
+      routerTelemetryReceivedAtMs: Math.min(receivedAtMs, Date.now()),
     };
     this.#scheduleRender();
   }
@@ -462,9 +493,7 @@ export class Monitor {
               "BUSY Bar smart-home scene action completed",
             );
             this.#showSceneAnnouncement(
-              result === "lightsOff"
-                ? "LIGHTS OFF"
-                : sceneAnnouncementLabel(sceneAction.sceneId),
+              result === "lightsOff" ? "LIGHTS OFF" : sceneAnnouncementLabel(sceneAction.sceneId),
             );
             if (status) this.#smartHomeRefreshQueued = true;
             this.#scheduleBackPageRestore();

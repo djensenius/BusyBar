@@ -4,9 +4,15 @@ import {
   BoothStatusSchema,
   BoothSystemSnapshotEnvelopeSchema,
   MonitorSummarySchema,
+  RouterTelemetryListSchema,
   WsEnvelopeSchema,
 } from "./schemas.js";
-import type { BoothStatus, BoothSystemSnapshotEnvelope, MonitorSummary } from "./schemas.js";
+import type {
+  BoothStatus,
+  BoothSystemSnapshotEnvelope,
+  MonitorSummary,
+  RouterTelemetryEnvelope,
+} from "./schemas.js";
 
 const websocketUrl = (apiUrl: string): string => {
   const url = new URL("/v1/ws/status", apiUrl);
@@ -58,6 +64,18 @@ export const readSummary = async (
   return MonitorSummarySchema.parse(await fetchJson(url, token));
 };
 
+export const readRouterTelemetry = async (
+  apiUrl: string,
+  token: string,
+  boothId: string,
+): Promise<RouterTelemetryEnvelope | null> => {
+  const url = new URL("/v1/system/components/current", apiUrl);
+  url.searchParams.set("boothId", boothId);
+  url.searchParams.set("componentId", "router");
+  const sources = RouterTelemetryListSchema.parse(await fetchJson(url, token));
+  return sources.find((source) => source.componentId === "router") ?? null;
+};
+
 export interface OperatorFeedHandle {
   stop(): void;
 }
@@ -65,6 +83,7 @@ export interface OperatorFeedHandle {
 export interface OperatorMonitor {
   updateStatus(status: BoothStatus, receivedAtMs?: number): void;
   updateSystem(system: BoothSystemSnapshotEnvelope, receivedAtMs?: number): void;
+  updateRouterTelemetry(router: RouterTelemetryEnvelope, receivedAtMs?: number): void;
   updateSummary(summary: MonitorSummary): void;
 }
 
@@ -171,6 +190,13 @@ export const startOperatorPolling = (
         })
         .catch((error: unknown) => {
           log.warn({ err: error }, "Operator system poll failed");
+        }),
+      readRouterTelemetry(apiUrl, token, boothId)
+        .then((router) => {
+          if (router && !stopped) monitor.updateRouterTelemetry(router);
+        })
+        .catch((error: unknown) => {
+          log.warn({ err: error }, "Operator router telemetry poll failed");
         }),
     ]);
     polling = false;

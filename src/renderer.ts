@@ -15,10 +15,12 @@ import {
   weatherIconElements,
 } from "./front-art.js";
 import type {
+  BoothFanStats,
   BoothState,
   BoothStatus,
   BoothSystemSnapshotEnvelope,
   MonitorSummary,
+  RouterTelemetryEnvelope,
 } from "./schemas.js";
 import type { WeatherCondition, WeatherSnapshot } from "./weather-client.js";
 
@@ -35,6 +37,10 @@ export type SummaryFrontFrame =
   | "instructionPlaybackStartsToday";
 export type FrontFrame =
   | SummaryFrontFrame
+  | "fanCooling"
+  | "piCpuTemperature"
+  | "routerBatteryCharge"
+  | "routerBatteryTemperature"
   | "clock"
   | "weather";
 export type IdleMode = "weather" | "clock" | "weatherClock" | "telephone" | "all";
@@ -54,6 +60,8 @@ export interface MonitorState {
   statusReceivedAtMs: number | null;
   system: BoothSystemSnapshotEnvelope | null;
   systemReceivedAtMs: number | null;
+  routerTelemetry: RouterTelemetryEnvelope | null;
+  routerTelemetryReceivedAtMs: number | null;
   summary: MonitorSummary | null;
   weather: WeatherSnapshot | null;
   weatherReceivedAtMs: number | null;
@@ -93,6 +101,8 @@ const OPTIONAL_ALL_TIME_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
   "messagePlaybackStartsTotal",
 ];
 
+const ROUTER_TELEMETRY_STALE_AFTER_MS = 5 * 60_000;
+
 const COLORS = {
   blueDark: "#003B7AFF",
   amber: "#FAAB00FF",
@@ -120,10 +130,16 @@ type Gradient = readonly [string, string];
 type DisplayElement = DisplayDrawParams["elements"][number];
 const FRONT_RECTANGLE_SLOT_COUNT = 24;
 const FRONT_TEXT_SLOT_COUNT = 5;
+const BACK_RECTANGLE_SLOT_COUNT = 18;
+const BACK_TEXT_SLOT_COUNT = 14;
 
 interface FrontPresentation {
   readonly elements: DisplayElement[];
   readonly indicator?: string;
+}
+
+interface BackPresentation {
+  readonly elements: DisplayElement[];
 }
 
 interface HealthPresentation {
@@ -194,14 +210,7 @@ const stableFrontElements = (elements: readonly DisplayElement[]): DisplayElemen
       const rectangle = rectangles[index];
       return rectangle
         ? { ...rectangle, id: `front-rectangle-slot-${index}` }
-        : frontRectangle(
-            `front-rectangle-slot-${index}`,
-            0,
-            0,
-            1,
-            1,
-            COLORS.transparent,
-          );
+        : frontRectangle(`front-rectangle-slot-${index}`, 0, 0, 1, 1, COLORS.transparent);
     }),
     ...Array.from({ length: FRONT_TEXT_SLOT_COUNT }, (_, index): TextElement => {
       const text = texts[index];
@@ -313,12 +322,67 @@ export const statusIsStale = (
   staleAfterMs: number,
 ): boolean => statusReceivedAtMs === null || Math.max(0, nowMs - statusReceivedAtMs) > staleAfterMs;
 
+interface FanCoolingPresentation {
+  readonly ratio: number;
+  readonly label: "OFF" | "LOW" | "MEDIUM" | "HIGH" | "MAX" | "ON";
+}
+
+const clampRatio = (value: number): number => Math.max(0, Math.min(1, value));
+
+const fanLevelLabel = (ratio: number): FanCoolingPresentation["label"] => {
+  if (ratio <= 0) return "OFF";
+  if (ratio <= 0.32) return "LOW";
+  if (ratio <= 0.52) return "MEDIUM";
+  if (ratio <= 0.82) return "HIGH";
+  return "MAX";
+};
+
+const fanCoolingPresentation = (
+  fan: BoothFanStats | null | undefined,
+): FanCoolingPresentation | null => {
+  if (!fan) return null;
+  if (typeof fan.pwmRatio === "number") {
+    const ratio = clampRatio(fan.pwmRatio);
+    return { ratio, label: fanLevelLabel(ratio) };
+  }
+  if (
+    typeof fan.coolingState === "number" &&
+    typeof fan.maxCoolingState === "number" &&
+    fan.maxCoolingState > 0
+  ) {
+    const ratio = clampRatio(fan.coolingState / fan.maxCoolingState);
+    return { ratio, label: fanLevelLabel(ratio) };
+  }
+  if (fan.commandedOn === false) return { ratio: 0, label: "OFF" };
+  if (fan.commandedOn === true) return { ratio: 0.5, label: "ON" };
+  return null;
+};
+
 export const availableFrontFrames = (
   state: MonitorState,
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): FrontFrame[] => {
-  const telephoneFrames = state.summary
+  const systemFresh =
+    state.system !== null && ageMs(state.systemReceivedAtMs, nowMs) <= config.systemStaleAfterMs;
+  const snapshot = systemFresh ? state.system?.snapshot : null;
+  const routerFresh =
+    state.routerTelemetry !== null &&
+    ageMs(state.routerTelemetryReceivedAtMs, nowMs) <= ROUTER_TELEMETRY_STALE_AFTER_MS;
+  const battery = routerFresh ? state.routerTelemetry?.latestSnapshot?.battery : null;
+  const vitalFrames: FrontFrame[] = [
+    ...(fanCoolingPresentation(snapshot?.fan) ? (["fanCooling"] satisfies FrontFrame[]) : []),
+    ...(typeof snapshot?.temperatureCelsius === "number"
+      ? (["piCpuTemperature"] satisfies FrontFrame[])
+      : []),
+    ...(typeof battery?.chargePercent === "number"
+      ? (["routerBatteryCharge"] satisfies FrontFrame[])
+      : []),
+    ...(typeof battery?.temperatureCelsius === "number"
+      ? (["routerBatteryTemperature"] satisfies FrontFrame[])
+      : []),
+  ];
+  const summaryFrames: FrontFrame[] = state.summary
     ? [
         ...(state.summary.interactionsToday === 0
           ? []
@@ -357,10 +421,11 @@ export const availableFrontFrames = (
             : []),
       ]
     : [...BASE_TELEPHONE_FRAMES];
+  const telephoneFrames = [...summaryFrames, ...vitalFrames];
   const weatherAvailable = Boolean(
     config.weather &&
-      state.weather &&
-      ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs,
+    state.weather &&
+    ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs,
   );
   const selectedFrames =
     state.idleMode === "weather"
@@ -397,12 +462,7 @@ const healthPresentation = (
     !state.cloudConnected
   ) {
     return {
-      view: warningPresentation(
-        "OFFLINE",
-        [COLORS.redDark, COLORS.red],
-        COLORS.red,
-        COLORS.red,
-      ),
+      view: warningPresentation("OFFLINE", [COLORS.redDark, COLORS.red], COLORS.red, COLORS.red),
       severity: "crit",
       offline: true,
     };
@@ -466,21 +526,74 @@ const healthPresentation = (
 const backText = (
   id: string,
   value: string,
+  x: number,
   y: number,
   font: TextElement["font"],
   color: string = COLORS.white,
+  align: NonNullable<TextElement["align"]> = "top_left",
+  width?: number,
 ): TextElement => ({
   id,
   type: "text",
-  x: 2,
+  x,
   y,
   display: "back",
-  align: "top_left",
+  align,
   text: sanitize(value, 36),
   font,
   color,
-  width: 156,
+  ...(width === undefined ? {} : { width }),
 });
+
+const backRectangle = (
+  id: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string,
+): RectangleElement => ({
+  id,
+  type: "rectangle",
+  x,
+  y,
+  display: "back",
+  align: "top_left",
+  width,
+  height,
+  fill: "solid",
+  fill_colors: [color],
+  border_width: 0,
+  border_color: COLORS.transparent,
+});
+
+const stableBackElements = (elements: readonly DisplayElement[]): DisplayElement[] => {
+  const rectangles = elements.filter(
+    (element): element is RectangleElement => element.type === "rectangle",
+  );
+  const texts = elements.filter((element): element is TextElement => element.type === "text");
+  if (
+    rectangles.length + texts.length !== elements.length ||
+    rectangles.length > BACK_RECTANGLE_SLOT_COUNT ||
+    texts.length > BACK_TEXT_SLOT_COUNT
+  ) {
+    throw new Error("Rear presentation exceeds the reusable BUSY Bar element slots");
+  }
+  return [
+    ...Array.from({ length: BACK_RECTANGLE_SLOT_COUNT }, (_, index) => {
+      const rectangle = rectangles[index];
+      return rectangle
+        ? { ...rectangle, id: `back-rectangle-slot-${index}` }
+        : backRectangle(`back-rectangle-slot-${index}`, 0, 0, 1, 1, COLORS.transparent);
+    }),
+    ...Array.from({ length: BACK_TEXT_SLOT_COUNT }, (_, index): TextElement => {
+      const text = texts[index];
+      return text
+        ? { ...text, id: `back-text-slot-${index}` }
+        : backText(`back-text-slot-${index}`, "", 0, 0, "tiny", COLORS.transparent);
+    }),
+  ];
+};
 
 const shortId = (value: string | null | undefined): string => (value ? value.slice(0, 8) : "--");
 
@@ -489,9 +602,158 @@ const percent = (used: number | null | undefined, total: number | null | undefin
     ? `${Math.round((used / total) * 100)}%`
     : "--";
 
+const compactUptime = (seconds: number | null | undefined): string => {
+  if (typeof seconds !== "number") return "--";
+  const minutes = Math.floor(seconds / 60);
+  const days = Math.floor(minutes / 1_440);
+  const hours = Math.floor((minutes % 1_440) / 60);
+  if (days > 0) return `${days}D ${hours}H`;
+  return `${hours}H ${minutes % 60}M`;
+};
+
+const fanGaugeBackElements = (fan: FanCoolingPresentation | null): RectangleElement[] => {
+  const centerX = 31;
+  const centerY = 57;
+  const ratio = fan?.ratio ?? 0;
+  const activeTicks = fan ? Math.ceil(clampRatio(ratio) * 10) : 0;
+  const ticks = [
+    [10, 55],
+    [8, 47],
+    [11, 39],
+    [17, 32],
+    [25, 28],
+    [34, 28],
+    [42, 32],
+    [48, 39],
+    [51, 47],
+    [50, 55],
+  ] as const;
+  const angle = Math.PI * (1.25 + clampRatio(ratio) * 0.5);
+  const needle = [0.35, 0.68, 1].map(
+    (distance) =>
+      [
+        Math.round(centerX + Math.cos(angle) * 18 * distance),
+        Math.round(centerY + Math.sin(angle) * 18 * distance),
+      ] as const,
+  );
+  return [
+    ...ticks.map(([x, y], index) =>
+      backRectangle(
+        `back-fan-tick-${index}`,
+        x,
+        y,
+        3,
+        3,
+        index < activeTicks ? COLORS.white : COLORS.slate,
+      ),
+    ),
+    backRectangle("back-fan-hub", centerX - 2, centerY - 2, 5, 5, COLORS.white),
+    ...needle.map(([x, y], index) =>
+      backRectangle(`back-fan-needle-${index}`, x - 1, y - 1, 3, 3, COLORS.white),
+    ),
+  ];
+};
+
+const systemVitalsBackPresentation = (
+  state: MonitorState,
+  config: Extract<MonitorConfig, { enabled: true }>,
+  nowMs: number,
+): BackPresentation => {
+  const systemFresh =
+    state.system !== null && ageMs(state.systemReceivedAtMs, nowMs) <= config.systemStaleAfterMs;
+  const snapshot = systemFresh ? state.system?.snapshot : null;
+  const routerFresh =
+    state.routerTelemetry !== null &&
+    ageMs(state.routerTelemetryReceivedAtMs, nowMs) <= ROUTER_TELEMETRY_STALE_AFTER_MS;
+  const battery = routerFresh ? state.routerTelemetry?.latestSnapshot?.battery : null;
+  const fan = fanCoolingPresentation(snapshot?.fan);
+  const cpu = snapshot?.cpu;
+  const memory = snapshot?.memory;
+  return {
+    elements: [
+      backRectangle("back-vitals-header-rule", 0, 11, 160, 1, COLORS.slate),
+      backRectangle("back-vitals-fan-rule", 64, 14, 1, 64, COLORS.slate),
+      backRectangle("back-vitals-pi-rule", 113, 14, 1, 64, COLORS.slate),
+      ...fanGaugeBackElements(fan),
+      backText("back-vitals-title", "BOOTH VITALS", 2, 1, "bold"),
+      backText("back-vitals-fan", "FAN", 4, 15, "small", COLORS.ice),
+      backText("back-vitals-fan-level", fan?.label ?? "--", 4, 68, "small"),
+      backText("back-vitals-pi", "PI", 69, 15, "small", COLORS.ice),
+      backText(
+        "back-vitals-pi-temp",
+        snapshot?.temperatureCelsius == null
+          ? "-- C"
+          : `${snapshot.temperatureCelsius.toFixed(1)} C`,
+        69,
+        27,
+        "normal",
+      ),
+      backText(
+        "back-vitals-pi-cpu",
+        `CPU ${cpu?.usageRatio == null ? "--" : `${Math.round(cpu.usageRatio * 100)}%`}`,
+        69,
+        43,
+        "small",
+      ),
+      backText(
+        "back-vitals-pi-memory",
+        `MEM ${percent(memory?.usedBytes, memory?.totalBytes)}`,
+        69,
+        54,
+        "small",
+      ),
+      backText(
+        "back-vitals-pi-up",
+        `UP ${compactUptime(snapshot?.uptimeSeconds)}`,
+        69,
+        65,
+        "small",
+      ),
+      backText("back-vitals-router", "ROUTER", 117, 15, "small", COLORS.ice),
+      backText(
+        "back-vitals-battery-charge",
+        battery?.chargePercent == null ? "--%" : `${Math.round(battery.chargePercent)}%`,
+        117,
+        27,
+        "normal",
+      ),
+      backText("back-vitals-battery-label", "BATTERY", 117, 40, "tiny", COLORS.ice),
+      backText(
+        "back-vitals-battery-temp",
+        battery?.temperatureCelsius == null
+          ? "TEMP -- C"
+          : `TEMP ${battery.temperatureCelsius.toFixed(1)} C`,
+        117,
+        49,
+        "small",
+      ),
+      backText(
+        "back-vitals-battery-voltage",
+        battery?.voltageVolts == null ? "VOLT -- V" : `VOLT ${battery.voltageVolts.toFixed(2)} V`,
+        117,
+        59,
+        "small",
+      ),
+      backText(
+        "back-vitals-battery-current",
+        battery?.currentAmperes == null
+          ? "CURR -- A"
+          : `CURR ${battery.currentAmperes.toFixed(2)} A`,
+        117,
+        69,
+        "small",
+      ),
+    ],
+  };
+};
+
 const sceneLabel = (entityId: string | null): string =>
   entityId
-    ? entityId.replace(/^scene\./, "").replace(/_/g, " ").toUpperCase().slice(0, 18)
+    ? entityId
+        .replace(/^scene\./, "")
+        .replace(/_/g, " ")
+        .toUpperCase()
+        .slice(0, 18)
     : "--";
 
 const brightnessLevel = (brightness: number | null): string =>
@@ -522,7 +784,9 @@ const smartHomeBackLines = (
     state.smartHomeAction?.result === "checking" &&
     state.smartHomeAction.sceneId === config.startSceneId;
   const lightsOff = Boolean(
-    status && status.lights.length > 0 && status.lights.every((light) => light.currentState === "off"),
+    status &&
+    status.lights.length > 0 &&
+    status.lights.every((light) => light.currentState === "off"),
   );
   const statusLabel = checkingStart
     ? "CHECKING"
@@ -603,19 +867,6 @@ const backLines = (
       `ERROR ${status?.lastError ?? "CLEAR"}`,
     ];
   }
-  if (state.backPage === 1) {
-    const memory = snapshot?.memory;
-    const disk = snapshot?.disks?.[0];
-    return [
-      "SYSTEM",
-      `CLIENT ${system?.version ?? "--"}`,
-      `TEMP ${snapshot?.temperatureCelsius?.toFixed(1) ?? "--"} C`,
-      `CPU ${snapshot?.cpu?.usageRatio != null ? `${Math.round(snapshot.cpu.usageRatio * 100)}%` : "--"}`,
-      `MEM ${percent(memory?.usedBytes, memory?.totalBytes)}`,
-      `DISK ${disk ? percent(disk.totalBytes - disk.availableBytes, disk.totalBytes) : "--"}`,
-      `UP ${snapshot?.uptimeSeconds != null ? `${Math.floor(snapshot.uptimeSeconds / 60)}m` : "--"}`,
-    ];
-  }
   if (state.backPage === 2) {
     const network = snapshot?.networks?.[0];
     return [
@@ -636,22 +887,13 @@ const compactCount = (count: number): string => (count > 999 ? "999+" : String(c
 const summaryCount = (count: number | undefined): string =>
   count === undefined ? "--" : compactCount(count);
 
-const idleModePresentation = (
-  mode: IdleMode,
-  dark: boolean,
-): FrontPresentation => {
+const idleModePresentation = (mode: IdleMode, dark: boolean): FrontPresentation => {
   const label =
-    mode === "weatherClock"
-      ? "WX+CLOCK"
-      : mode === "telephone"
-        ? "BOOTH"
-        : mode.toUpperCase();
+    mode === "weatherClock" ? "WX+CLOCK" : mode === "telephone" ? "BOOTH" : mode.toUpperCase();
   return {
     elements: [
       frontBackground(
-        dark
-          ? [COLORS.trueBlack, COLORS.trueBlack]
-          : [COLORS.blueDark, COLORS.cyanDark],
+        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.blueDark, COLORS.cyanDark],
       ),
       frontText("front-mode-title", "MODE", 36, 1, "tiny", COLORS.ice, "top_mid"),
       frontText(
@@ -684,15 +926,11 @@ const sceneAnnouncementPresentation = (
   const visibleSegments = announcement.phase === 0 ? 1 : announcement.phase === 1 ? 3 : 5;
   return {
     elements: [
-      frontBackground(
-        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.slateDark, accentDark],
-      ),
+      frontBackground(dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.slateDark, accentDark]),
       frontRectangle("front-scene-sweep", 0, 0, sweepWidth, 16, accentDark),
       ...checkSegments
         .slice(0, visibleSegments)
-        .map(([x, y], index) =>
-          frontRectangle(`front-scene-check-${index}`, x, y, 3, 2, accent),
-        ),
+        .map(([x, y], index) => frontRectangle(`front-scene-check-${index}`, x, y, 3, 2, accent)),
       frontText("front-scene-title", "SCENE", 45, 1, "tiny", COLORS.ice, "top_mid"),
       frontText(
         "front-scene-value",
@@ -829,21 +1067,12 @@ const summaryPresentation = (
   dark: boolean,
 ): FrontPresentation => {
   const { label, period, count, background, accent } = summaryFrameCard(frame, summary);
-  const themedBackground: Gradient = dark
-    ? [COLORS.trueBlack, COLORS.trueBlack]
-    : background;
+  const themedBackground: Gradient = dark ? [COLORS.trueBlack, COLORS.trueBlack] : background;
   return {
     elements: [
       frontBackground(themedBackground),
       ...boothArtElements("front-booth", "idle"),
-      frontRectangle(
-        "front-count-badge",
-        53,
-        0,
-        19,
-        16,
-        dark ? COLORS.trueBlack : accent,
-      ),
+      frontRectangle("front-count-badge", 53, 0, 19, 16, dark ? COLORS.trueBlack : accent),
       frontText(
         "front-count-label",
         label,
@@ -875,11 +1104,165 @@ const summaryPresentation = (
   };
 };
 
-const clockPresentation = (
-  timeZone: string,
-  nowMs: number,
+const vitalCardElements = (
+  label: string,
+  detail: string,
+  background: Gradient,
+  accent: string,
+  dark: boolean,
+): DisplayElement[] => [
+  frontBackground(dark ? [COLORS.trueBlack, COLORS.trueBlack] : background),
+  ...boothArtElements("front-booth", "idle"),
+  frontRectangle("front-vital-badge", 53, 0, 19, 16, dark ? COLORS.trueBlack : accent),
+  frontText(
+    "front-vital-label",
+    label,
+    18,
+    1,
+    summaryLabelFont(label),
+    dark ? accent : COLORS.white,
+    "top_left",
+  ),
+  frontText(
+    "front-vital-detail",
+    detail,
+    18,
+    10,
+    "tiny",
+    dark ? COLORS.ice : COLORS.white,
+    "top_left",
+  ),
+];
+
+const fanGaugeElements = (ratio: number, color: string): RectangleElement[] => {
+  const ticks = [
+    [55, 9, 2, 4],
+    [57, 4, 3, 2],
+    [62, 2, 4, 2],
+    [68, 5, 2, 5],
+  ] as const;
+  const step = Math.min(4, Math.ceil(clampRatio(ratio) * 4));
+  const needleByStep = [
+    [[61, 11, 3, 3]],
+    [
+      [61, 11, 3, 3],
+      [59, 9, 2, 2],
+      [58, 7, 2, 2],
+      [57, 5, 2, 2],
+    ],
+    [
+      [61, 11, 3, 3],
+      [60, 9, 2, 2],
+      [59, 7, 2, 2],
+      [59, 5, 2, 2],
+    ],
+    [
+      [61, 11, 3, 3],
+      [63, 8, 2, 3],
+      [65, 5, 2, 3],
+    ],
+    [
+      [61, 11, 3, 3],
+      [64, 10, 5, 2],
+    ],
+  ] as const;
+  return [...ticks.slice(0, step), ...(needleByStep[step] ?? needleByStep[0])].map(
+    ([x, y, width, height], index) =>
+      frontRectangle(`front-fan-gauge-${index}`, x, y, width, height, color),
+  );
+};
+
+const fanVitalPresentation = (fan: FanCoolingPresentation, dark: boolean): FrontPresentation => {
+  const gaugeColor = dark ? COLORS.cyan : COLORS.black;
+  return {
+    elements: [
+      ...vitalCardElements("FAN", fan.label, [COLORS.blueDark, COLORS.cyanDark], COLORS.cyan, dark),
+      ...fanGaugeElements(fan.ratio, gaugeColor),
+    ],
+  };
+};
+
+const numericVitalPresentation = (
+  label: string,
+  detail: string,
+  value: string,
+  background: Gradient,
+  accent: string,
+  dark: boolean,
+  degree: boolean,
+): FrontPresentation => {
+  const valueColor = dark ? accent : COLORS.black;
+  const valueCenter = degree ? 61 : 62.5;
+  const degreeX = Math.min(68, Math.round(valueCenter + value.length * 3));
+  return {
+    elements: [
+      ...vitalCardElements(label, detail, background, accent, dark),
+      frontText(
+        "front-vital-value",
+        value,
+        valueCenter,
+        8,
+        value.length > 3 ? "small" : value.length > 2 ? "condensed" : "large",
+        valueColor,
+        "center",
+      ),
+      ...(degree ? [degreeElement("front-vital-degree", degreeX, 3, valueColor)] : []),
+    ],
+  };
+};
+
+const vitalPresentation = (
+  frame: Extract<
+    FrontFrame,
+    "fanCooling" | "piCpuTemperature" | "routerBatteryCharge" | "routerBatteryTemperature"
+  >,
+  state: MonitorState,
   dark: boolean,
 ): FrontPresentation => {
+  const snapshot = state.system?.snapshot;
+  const battery = state.routerTelemetry?.latestSnapshot?.battery;
+  switch (frame) {
+    case "fanCooling":
+      return fanVitalPresentation(
+        fanCoolingPresentation(snapshot?.fan) ?? { ratio: 0, label: "OFF" },
+        dark,
+      );
+    case "piCpuTemperature":
+      return numericVitalPresentation(
+        "PI",
+        "CPU TEMP",
+        snapshot?.temperatureCelsius == null
+          ? "--"
+          : String(Math.round(snapshot.temperatureCelsius)),
+        [COLORS.violetDark, COLORS.slate],
+        COLORS.ice,
+        dark,
+        true,
+      );
+    case "routerBatteryCharge":
+      return numericVitalPresentation(
+        "BATTERY",
+        "ROUTER",
+        battery?.chargePercent == null ? "--" : `${Math.round(battery.chargePercent)}%`,
+        [COLORS.slateDark, COLORS.slate],
+        COLORS.yellow,
+        dark,
+        false,
+      );
+    case "routerBatteryTemperature":
+      return numericVitalPresentation(
+        "BAT TEMP",
+        "ROUTER",
+        battery?.temperatureCelsius == null ? "--" : String(Math.round(battery.temperatureCelsius)),
+        [COLORS.amberDark, COLORS.slate],
+        COLORS.amber,
+        dark,
+        true,
+      );
+  }
+};
+
+const clockPresentation = (timeZone: string, nowMs: number, dark: boolean): FrontPresentation => {
   const date = new Date(nowMs);
   const month = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -907,34 +1290,11 @@ const clockPresentation = (
   return {
     elements: [
       frontBackground(
-        dark
-          ? [COLORS.trueBlack, COLORS.trueBlack]
-          : [COLORS.blueDark, COLORS.cyanDark],
+        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.blueDark, COLORS.cyanDark],
       ),
-      frontRectangle(
-        "front-clock-badge",
-        44,
-        0,
-        28,
-        16,
-        dark ? COLORS.trueBlack : COLORS.cyan,
-      ),
-      frontRectangle(
-        "front-clock-divider",
-        44,
-        0,
-        1,
-        16,
-        dark ? COLORS.cyanDark : COLORS.blueDark,
-      ),
-      frontText(
-        "front-clock-time",
-        time,
-        22,
-        8,
-        "large",
-        dark ? COLORS.ice : COLORS.white,
-      ),
+      frontRectangle("front-clock-badge", 44, 0, 28, 16, dark ? COLORS.trueBlack : COLORS.cyan),
+      frontRectangle("front-clock-divider", 44, 0, 1, 16, dark ? COLORS.cyanDark : COLORS.blueDark),
+      frontText("front-clock-time", time, 22, 8, "large", dark ? COLORS.ice : COLORS.white),
       frontText(
         "front-clock-weekday",
         weekday,
@@ -944,14 +1304,7 @@ const clockPresentation = (
         dark ? COLORS.cyan : COLORS.black,
         "top_mid",
       ),
-      frontText(
-        "front-clock-date",
-        dateLabel,
-        58,
-        10,
-        "small",
-        dark ? COLORS.cyan : COLORS.black,
-      ),
+      frontText("front-clock-date", dateLabel, 58, 10, "small", dark ? COLORS.cyan : COLORS.black),
     ],
   };
 };
@@ -977,11 +1330,7 @@ const weatherPalette = (condition: WeatherCondition): WeatherPalette => {
       accentText: "#06131DFF",
     };
   }
-  if (
-    condition === "rainy" ||
-    condition === "pouring" ||
-    condition === "lightning-rainy"
-  ) {
+  if (condition === "rainy" || condition === "pouring" || condition === "lightning-rainy") {
     return {
       background: [COLORS.blueDark, COLORS.cyanDark],
       accent: "#278EB7FF",
@@ -1034,10 +1383,7 @@ type WeatherDetail = StandardWeatherDetail | HighLowWeatherDetail;
 const roundedTemperature = (temperature: number): string => String(Math.round(temperature));
 
 const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
-  if (
-    weather.precipitationProbability !== null &&
-    weather.precipitationProbability >= 30
-  ) {
+  if (weather.precipitationProbability !== null && weather.precipitationProbability >= 30) {
     return {
       kind: "standard",
       top:
@@ -1079,10 +1425,7 @@ const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
   return { kind: "standard", top: "NOW", bottom: "--", degree: false };
 };
 
-const weatherPresentation = (
-  weather: WeatherSnapshot,
-  dark: boolean,
-): FrontPresentation => {
+const weatherPresentation = (weather: WeatherSnapshot, dark: boolean): FrontPresentation => {
   const palette = weatherPalette(weather.condition);
   const themedPalette: WeatherPalette = dark
     ? {
@@ -1132,7 +1475,7 @@ const weatherPresentation = (
             "front-weather-low-value",
             detail.low,
             70,
-            9,
+            8,
             "small",
             themedPalette.accentText,
             "top_right",
@@ -1151,25 +1494,14 @@ const weatherPresentation = (
           frontText(
             "front-weather-detail-value",
             detail.bottom,
-            detail.degree
-              ? detail.bottom.length > 2
-                ? 58
-                : 59.5
-              : 61,
+            detail.degree ? (detail.bottom.length > 2 ? 58 : 59.5) : 61,
             10,
             "small",
             themedPalette.accentText,
             "center",
           ),
           ...(detail.degree
-            ? [
-                degreeElement(
-                  "front-weather-detail-degree",
-                  64,
-                  8,
-                  themedPalette.accentText,
-                ),
-              ]
+            ? [degreeElement("front-weather-detail-degree", 64, 8, themedPalette.accentText)]
             : []),
         ];
   return {
@@ -1213,12 +1545,21 @@ const idlePresentation = (
   const frame = frames.includes(state.frontFrame)
     ? state.frontFrame
     : (frames[0] ?? DEFAULT_FRONT_FRAME);
-  if (frame !== "clock" && frame !== "weather") {
-    return summaryPresentation(frame, state.summary, dark);
-  }
   if (frame === "clock") return clockPresentation(config.timeZone, nowMs, dark);
-  if (frame === "weather" && state.weather) return weatherPresentation(state.weather, dark);
-  return summaryPresentation(DEFAULT_FRONT_FRAME, state.summary, dark);
+  if (frame === "weather") {
+    return state.weather
+      ? weatherPresentation(state.weather, dark)
+      : summaryPresentation(DEFAULT_FRONT_FRAME, state.summary, dark);
+  }
+  if (
+    frame === "fanCooling" ||
+    frame === "piCpuTemperature" ||
+    frame === "routerBatteryCharge" ||
+    frame === "routerBatteryTemperature"
+  ) {
+    return vitalPresentation(frame, state, dark);
+  }
+  return summaryPresentation(frame, state.summary, dark);
 };
 
 export const renderMonitor = (
@@ -1235,15 +1576,24 @@ export const renderMonitor = (
       ? statePresentation(boothState)
       : (health.view ?? idlePresentation(state, config, nowMs));
   const frontElements = stableFrontElements(frontView.elements);
-  const lines = backLines(state, config, nowMs);
-  const backElements = Array.from({ length: 7 }, (_, index) =>
-    backText(
-      `back-line-${index}`,
-      lines[index] ?? "",
-      index === 0 ? 1 : 12 + (index - 1) * 11,
-      index === 0 ? "bold" : "small",
-    ),
-  );
+  const backView: BackPresentation =
+    state.backPage === 1
+      ? systemVitalsBackPresentation(state, config, nowMs)
+      : {
+          elements: backLines(state, config, nowMs).map((line, index) =>
+            backText(
+              `back-line-${index}`,
+              line,
+              2,
+              index === 0 ? 1 : 12 + (index - 1) * 11,
+              index === 0 ? "bold" : "small",
+              COLORS.white,
+              "top_left",
+              156,
+            ),
+          ),
+        };
+  const backElements = stableBackElements(backView.elements);
   const frontSignature = JSON.stringify({
     indicator: frontView.indicator ?? null,
     elements: frontElements,
