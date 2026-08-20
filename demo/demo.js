@@ -358,7 +358,7 @@ const designs = [
     kind: "vital",
     metric: "temperature",
     name: "Booth vital - router battery temperature",
-    label: "BAT TEMP",
+    label: "BATTERY",
     detail: "ROUTER",
     value: "32",
     degree: true,
