@@ -247,11 +247,15 @@ const frontRectangleElements = (payload: DisplayDrawParams): RectangleElement[] 
   );
 
 const frontElementIds = (payload: DisplayDrawParams): string[] =>
-  payload.elements.filter((element) => element.display === "front").map((element) => element.id);
+  payload.elements
+    .filter((element) => element.display === "front")
+    .map((element) => element.id);
 
 const frontFillColors = (payload: DisplayDrawParams): string[] =>
   payload.elements.flatMap((element) =>
-    element.display === "front" && element.type === "rectangle" ? element.fill_colors : [],
+    element.display === "front" && element.type === "rectangle"
+      ? element.fill_colors
+      : [],
   );
 
 describe("monitor renderer", () => {
@@ -404,11 +408,24 @@ describe("monitor renderer", () => {
       availableFrontFrames({ ...state, idleMode: "clock" }, weatherEnabledConfig, now),
     ).toEqual(["clock"]);
     expect(
-      availableFrontFrames({ ...state, idleMode: "weatherClock" }, weatherEnabledConfig, now),
+      availableFrontFrames(
+        { ...state, idleMode: "weatherClock" },
+        weatherEnabledConfig,
+        now,
+      ),
     ).toEqual(["weather", "clock"]);
     expect(
-      availableFrontFrames({ ...state, idleMode: "telephone", summary }, weatherEnabledConfig, now),
-    ).toEqual(["interactionsToday", "messagesToday", "interactionsTotal", "messagesTotal"]);
+      availableFrontFrames(
+        { ...state, idleMode: "telephone", summary },
+        weatherEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+    ]);
     expect(
       availableFrontFrames(
         { ...state, idleMode: "telephone", summary: breakdownSummary },
@@ -464,14 +481,23 @@ describe("monitor renderer", () => {
         weatherEnabledConfig,
         now,
       ),
-    ).toEqual(["interactionsTotal", "messagesTotal", "messagePlaybackStartsTotal"]);
+    ).toEqual([
+      "interactionsTotal",
+      "messagesTotal",
+      "messagePlaybackStartsTotal",
+    ]);
     expect(
       availableFrontFrames(
         { ...state, idleMode: "telephone", summary: unknownPickupDaySummary },
         weatherEnabledConfig,
         now,
       ),
-    ).toEqual(["interactionsToday", "messagesToday", "interactionsTotal", "messagesTotal"]);
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+    ]);
   });
 
   it("adds booth vitals with a visual fan gauge and numeric temperature cards", () => {
@@ -675,10 +701,7 @@ describe("monitor renderer", () => {
 
   it("shows a compact daily pickup breakout on the rear overview", () => {
     expect(
-      textsFor(
-        renderMonitor(model({ summary: breakdownSummary }), smartHomeConfig, now).payload,
-        "back",
-      ),
+      textsFor(renderMonitor(model({ summary: breakdownSummary }), smartHomeConfig, now).payload, "back"),
     ).toEqual([
       "DAY PICKUPS 12 MSGS 8",
       "NO SEL 3 WRONG 5",

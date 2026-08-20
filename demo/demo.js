@@ -37,7 +37,11 @@ const weatherStyle = (condition) => {
       accentText: "#06131d",
     };
   }
-  if (condition === "rainy" || condition === "pouring" || condition === "lightning-rainy") {
+  if (
+    condition === "rainy" ||
+    condition === "pouring" ||
+    condition === "lightning-rainy"
+  ) {
     return {
       start: COLORS.blueDark,
       end: COLORS.cyanDark,
@@ -45,7 +49,11 @@ const weatherStyle = (condition) => {
       accentText: "#03151e",
     };
   }
-  if (condition === "snowy" || condition === "snowy-rainy" || condition === "hail") {
+  if (
+    condition === "snowy" ||
+    condition === "snowy-rainy" ||
+    condition === "hail"
+  ) {
     return {
       start: COLORS.slateDark,
       end: COLORS.slate,
@@ -456,7 +464,8 @@ const drawBoothText = (context, design) => {
   context.fillStyle = COLORS.white;
 
   if (design.value) {
-    const labelFontSize = design.label.length > 7 ? 5 : design.label.length > 5 ? 6 : 7;
+    const labelFontSize =
+      design.label.length > 7 ? 5 : design.label.length > 5 ? 6 : 7;
     context.font = `bold ${labelFontSize}px monospace`;
     context.textBaseline = "top";
     context.fillText(design.label, 18, 1);
@@ -467,7 +476,8 @@ const drawBoothText = (context, design) => {
     context.fillRect(53, 0, 19, 16);
     context.fillStyle = design.accentText;
     context.textBaseline = "middle";
-    context.font = design.value.length > 2 ? "bold 7px monospace" : "bold 10px monospace";
+    context.font =
+      design.value.length > 2 ? "bold 7px monospace" : "bold 10px monospace";
     context.textAlign = "center";
     context.fillText(design.value, 62.5, 8);
     return;

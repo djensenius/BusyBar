@@ -267,7 +267,9 @@ describe("monitor lifecycle", () => {
           ? config.renderDebounceMs
           : config.frontRotationMs + config.renderDebounceMs,
       );
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
     }
 
     await monitor.stop();
@@ -301,7 +303,9 @@ describe("monitor lifecycle", () => {
       ["INSTR", "DAY", "6"],
     ]) {
       await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
     }
 
     await monitor.stop();
@@ -334,7 +338,9 @@ describe("monitor lifecycle", () => {
           ? config.renderDebounceMs
           : config.frontRotationMs + config.renderDebounceMs,
       );
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
     }
 
     await monitor.stop();
@@ -368,7 +374,9 @@ describe("monitor lifecycle", () => {
           ? config.renderDebounceMs
           : config.frontRotationMs + config.renderDebounceMs,
       );
-      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(expected);
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
     }
 
     monitor.updateSummary(summaryWithZeroDailyCards());

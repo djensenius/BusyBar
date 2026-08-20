@@ -32,12 +32,18 @@ const nextFrontFrame = (
   return frames[(currentIndex + 1) % frames.length] ?? frames[0] ?? DEFAULT_FRONT_FRAME;
 };
 
-const IDLE_MODES: readonly IdleMode[] = ["weather", "clock", "weatherClock", "telephone", "all"];
+const IDLE_MODES: readonly IdleMode[] = [
+  "weather",
+  "clock",
+  "weatherClock",
+  "telephone",
+  "all",
+];
 
 export const nextIdleMode = (current: IdleMode, direction: number): IdleMode => {
   const index = IDLE_MODES.indexOf(current);
-  const next =
-    (((index + (direction > 0 ? 1 : -1)) % IDLE_MODES.length) + IDLE_MODES.length) %
+  const next = (((index + (direction > 0 ? 1 : -1)) % IDLE_MODES.length) +
+    IDLE_MODES.length) %
     IDLE_MODES.length;
   return IDLE_MODES[next] ?? "all";
 };
@@ -262,8 +268,7 @@ export class Monitor {
       ...this.#state,
       status,
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
-      frontFrame:
-        status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
+      frontFrame: status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
     this.#scheduleRender();
   }
@@ -493,7 +498,9 @@ export class Monitor {
               "BUSY Bar smart-home scene action completed",
             );
             this.#showSceneAnnouncement(
-              result === "lightsOff" ? "LIGHTS OFF" : sceneAnnouncementLabel(sceneAction.sceneId),
+              result === "lightsOff"
+                ? "LIGHTS OFF"
+                : sceneAnnouncementLabel(sceneAction.sceneId),
             );
             if (status) this.#smartHomeRefreshQueued = true;
             this.#scheduleBackPageRestore();

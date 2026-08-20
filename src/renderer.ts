@@ -210,7 +210,14 @@ const stableFrontElements = (elements: readonly DisplayElement[]): DisplayElemen
       const rectangle = rectangles[index];
       return rectangle
         ? { ...rectangle, id: `front-rectangle-slot-${index}` }
-        : frontRectangle(`front-rectangle-slot-${index}`, 0, 0, 1, 1, COLORS.transparent);
+        : frontRectangle(
+            `front-rectangle-slot-${index}`,
+            0,
+            0,
+            1,
+            1,
+            COLORS.transparent,
+          );
     }),
     ...Array.from({ length: FRONT_TEXT_SLOT_COUNT }, (_, index): TextElement => {
       const text = texts[index];
@@ -424,8 +431,8 @@ export const availableFrontFrames = (
   const telephoneFrames = [...summaryFrames, ...vitalFrames];
   const weatherAvailable = Boolean(
     config.weather &&
-    state.weather &&
-    ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs,
+      state.weather &&
+      ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs,
   );
   const selectedFrames =
     state.idleMode === "weather"
@@ -462,7 +469,12 @@ const healthPresentation = (
     !state.cloudConnected
   ) {
     return {
-      view: warningPresentation("OFFLINE", [COLORS.redDark, COLORS.red], COLORS.red, COLORS.red),
+      view: warningPresentation(
+        "OFFLINE",
+        [COLORS.redDark, COLORS.red],
+        COLORS.red,
+        COLORS.red,
+      ),
       severity: "crit",
       offline: true,
     };
@@ -749,11 +761,7 @@ const systemVitalsBackPresentation = (
 
 const sceneLabel = (entityId: string | null): string =>
   entityId
-    ? entityId
-        .replace(/^scene\./, "")
-        .replace(/_/g, " ")
-        .toUpperCase()
-        .slice(0, 18)
+    ? entityId.replace(/^scene\./, "").replace(/_/g, " ").toUpperCase().slice(0, 18)
     : "--";
 
 const brightnessLevel = (brightness: number | null): string =>
@@ -784,9 +792,7 @@ const smartHomeBackLines = (
     state.smartHomeAction?.result === "checking" &&
     state.smartHomeAction.sceneId === config.startSceneId;
   const lightsOff = Boolean(
-    status &&
-    status.lights.length > 0 &&
-    status.lights.every((light) => light.currentState === "off"),
+    status && status.lights.length > 0 && status.lights.every((light) => light.currentState === "off"),
   );
   const statusLabel = checkingStart
     ? "CHECKING"
@@ -887,13 +893,22 @@ const compactCount = (count: number): string => (count > 999 ? "999+" : String(c
 const summaryCount = (count: number | undefined): string =>
   count === undefined ? "--" : compactCount(count);
 
-const idleModePresentation = (mode: IdleMode, dark: boolean): FrontPresentation => {
+const idleModePresentation = (
+  mode: IdleMode,
+  dark: boolean,
+): FrontPresentation => {
   const label =
-    mode === "weatherClock" ? "WX+CLOCK" : mode === "telephone" ? "BOOTH" : mode.toUpperCase();
+    mode === "weatherClock"
+      ? "WX+CLOCK"
+      : mode === "telephone"
+        ? "BOOTH"
+        : mode.toUpperCase();
   return {
     elements: [
       frontBackground(
-        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.blueDark, COLORS.cyanDark],
+        dark
+          ? [COLORS.trueBlack, COLORS.trueBlack]
+          : [COLORS.blueDark, COLORS.cyanDark],
       ),
       frontText("front-mode-title", "MODE", 36, 1, "tiny", COLORS.ice, "top_mid"),
       frontText(
@@ -926,11 +941,15 @@ const sceneAnnouncementPresentation = (
   const visibleSegments = announcement.phase === 0 ? 1 : announcement.phase === 1 ? 3 : 5;
   return {
     elements: [
-      frontBackground(dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.slateDark, accentDark]),
+      frontBackground(
+        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.slateDark, accentDark],
+      ),
       frontRectangle("front-scene-sweep", 0, 0, sweepWidth, 16, accentDark),
       ...checkSegments
         .slice(0, visibleSegments)
-        .map(([x, y], index) => frontRectangle(`front-scene-check-${index}`, x, y, 3, 2, accent)),
+        .map(([x, y], index) =>
+          frontRectangle(`front-scene-check-${index}`, x, y, 3, 2, accent),
+        ),
       frontText("front-scene-title", "SCENE", 45, 1, "tiny", COLORS.ice, "top_mid"),
       frontText(
         "front-scene-value",
@@ -1067,12 +1086,21 @@ const summaryPresentation = (
   dark: boolean,
 ): FrontPresentation => {
   const { label, period, count, background, accent } = summaryFrameCard(frame, summary);
-  const themedBackground: Gradient = dark ? [COLORS.trueBlack, COLORS.trueBlack] : background;
+  const themedBackground: Gradient = dark
+    ? [COLORS.trueBlack, COLORS.trueBlack]
+    : background;
   return {
     elements: [
       frontBackground(themedBackground),
       ...boothArtElements("front-booth", "idle"),
-      frontRectangle("front-count-badge", 53, 0, 19, 16, dark ? COLORS.trueBlack : accent),
+      frontRectangle(
+        "front-count-badge",
+        53,
+        0,
+        19,
+        16,
+        dark ? COLORS.trueBlack : accent,
+      ),
       frontText(
         "front-count-label",
         label,
@@ -1262,7 +1290,11 @@ const vitalPresentation = (
   }
 };
 
-const clockPresentation = (timeZone: string, nowMs: number, dark: boolean): FrontPresentation => {
+const clockPresentation = (
+  timeZone: string,
+  nowMs: number,
+  dark: boolean,
+): FrontPresentation => {
   const date = new Date(nowMs);
   const month = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -1290,11 +1322,34 @@ const clockPresentation = (timeZone: string, nowMs: number, dark: boolean): Fron
   return {
     elements: [
       frontBackground(
-        dark ? [COLORS.trueBlack, COLORS.trueBlack] : [COLORS.blueDark, COLORS.cyanDark],
+        dark
+          ? [COLORS.trueBlack, COLORS.trueBlack]
+          : [COLORS.blueDark, COLORS.cyanDark],
       ),
-      frontRectangle("front-clock-badge", 44, 0, 28, 16, dark ? COLORS.trueBlack : COLORS.cyan),
-      frontRectangle("front-clock-divider", 44, 0, 1, 16, dark ? COLORS.cyanDark : COLORS.blueDark),
-      frontText("front-clock-time", time, 22, 8, "large", dark ? COLORS.ice : COLORS.white),
+      frontRectangle(
+        "front-clock-badge",
+        44,
+        0,
+        28,
+        16,
+        dark ? COLORS.trueBlack : COLORS.cyan,
+      ),
+      frontRectangle(
+        "front-clock-divider",
+        44,
+        0,
+        1,
+        16,
+        dark ? COLORS.cyanDark : COLORS.blueDark,
+      ),
+      frontText(
+        "front-clock-time",
+        time,
+        22,
+        8,
+        "large",
+        dark ? COLORS.ice : COLORS.white,
+      ),
       frontText(
         "front-clock-weekday",
         weekday,
@@ -1304,7 +1359,14 @@ const clockPresentation = (timeZone: string, nowMs: number, dark: boolean): Fron
         dark ? COLORS.cyan : COLORS.black,
         "top_mid",
       ),
-      frontText("front-clock-date", dateLabel, 58, 10, "small", dark ? COLORS.cyan : COLORS.black),
+      frontText(
+        "front-clock-date",
+        dateLabel,
+        58,
+        10,
+        "small",
+        dark ? COLORS.cyan : COLORS.black,
+      ),
     ],
   };
 };
@@ -1330,7 +1392,11 @@ const weatherPalette = (condition: WeatherCondition): WeatherPalette => {
       accentText: "#06131DFF",
     };
   }
-  if (condition === "rainy" || condition === "pouring" || condition === "lightning-rainy") {
+  if (
+    condition === "rainy" ||
+    condition === "pouring" ||
+    condition === "lightning-rainy"
+  ) {
     return {
       background: [COLORS.blueDark, COLORS.cyanDark],
       accent: "#278EB7FF",
@@ -1383,7 +1449,10 @@ type WeatherDetail = StandardWeatherDetail | HighLowWeatherDetail;
 const roundedTemperature = (temperature: number): string => String(Math.round(temperature));
 
 const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
-  if (weather.precipitationProbability !== null && weather.precipitationProbability >= 30) {
+  if (
+    weather.precipitationProbability !== null &&
+    weather.precipitationProbability >= 30
+  ) {
     return {
       kind: "standard",
       top:
@@ -1425,7 +1494,10 @@ const weatherDetail = (weather: WeatherSnapshot): WeatherDetail => {
   return { kind: "standard", top: "NOW", bottom: "--", degree: false };
 };
 
-const weatherPresentation = (weather: WeatherSnapshot, dark: boolean): FrontPresentation => {
+const weatherPresentation = (
+  weather: WeatherSnapshot,
+  dark: boolean,
+): FrontPresentation => {
   const palette = weatherPalette(weather.condition);
   const themedPalette: WeatherPalette = dark
     ? {
@@ -1494,14 +1566,25 @@ const weatherPresentation = (weather: WeatherSnapshot, dark: boolean): FrontPres
           frontText(
             "front-weather-detail-value",
             detail.bottom,
-            detail.degree ? (detail.bottom.length > 2 ? 58 : 59.5) : 61,
+            detail.degree
+              ? detail.bottom.length > 2
+                ? 58
+                : 59.5
+              : 61,
             10,
             "small",
             themedPalette.accentText,
             "center",
           ),
           ...(detail.degree
-            ? [degreeElement("front-weather-detail-degree", 64, 8, themedPalette.accentText)]
+            ? [
+                degreeElement(
+                  "front-weather-detail-degree",
+                  64,
+                  8,
+                  themedPalette.accentText,
+                ),
+              ]
             : []),
         ];
   return {
