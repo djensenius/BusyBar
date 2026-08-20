@@ -1,4 +1,4 @@
-import type { DisplayDrawParams } from "@busy-app/busy-lib";
+import type { DisplayDrawParams, RectangleElement, TextElement } from "@busy-app/busy-lib";
 import { describe, expect, it } from "vite-plus/test";
 import type { MonitorConfig } from "../src/config.js";
 import type { MonitorState } from "../src/renderer.js";
@@ -150,6 +150,17 @@ const textsFor = (payload: DisplayDrawParams, display: "front" | "back"): string
       : [],
   );
 
+const frontTextElements = (payload: DisplayDrawParams): TextElement[] =>
+  payload.elements.filter(
+    (element): element is TextElement => element.display === "front" && element.type === "text",
+  );
+
+const frontRectangleElements = (payload: DisplayDrawParams): RectangleElement[] =>
+  payload.elements.filter(
+    (element): element is RectangleElement =>
+      element.display === "front" && element.type === "rectangle",
+  );
+
 const frontElementIds = (payload: DisplayDrawParams): string[] =>
   payload.elements
     .filter((element) => element.display === "front")
@@ -169,7 +180,7 @@ describe("monitor renderer", () => {
         renderMonitor(model({ frontFrame: "interactionsToday", summary }), config, now).payload,
         "front",
       ),
-    ).toEqual(["PICK", "DAY", "12"]);
+    ).toEqual(["PICKUP", "DAY", "12"]);
     expect(
       textsFor(
         renderMonitor(model({ frontFrame: "messagesToday", summary }), config, now).payload,
@@ -181,7 +192,7 @@ describe("monitor renderer", () => {
         renderMonitor(model({ frontFrame: "interactionsTotal", summary }), config, now).payload,
         "front",
       ),
-    ).toEqual(["PICK", "ALL", "342"]);
+    ).toEqual(["PICKUP", "ALL", "342"]);
     expect(
       textsFor(
         renderMonitor(model({ frontFrame: "messagesTotal", summary }), config, now).payload,
@@ -189,10 +200,24 @@ describe("monitor renderer", () => {
       ),
     ).toEqual(["MSGS", "ALL", "187"]);
     expect(textsFor(renderMonitor(model(), config, now).payload, "front")).toEqual([
-      "PICK",
+      "PICKUP",
       "DAY",
       "--",
     ]);
+  });
+
+  it("uses the supported small font for six-character pickup labels", () => {
+    const rendered = renderMonitor(
+      model({ frontFrame: "interactionsToday", summary }),
+      config,
+      now,
+    ).payload;
+
+    expect(frontTextElements(rendered).find((element) => element.text === "PICKUP")).toMatchObject({
+      font: "small",
+    });
+    expect(frontTextElements(rendered)).toHaveLength(5);
+    expect(frontRectangleElements(rendered)).toHaveLength(24);
   });
 
   it("renders daily pickup breakout cards when the server provides them", () => {
@@ -475,7 +500,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["PICK", "DAY", "--"]);
+    ).toEqual(["PICKUP", "DAY", "--"]);
 
     for (const condition of WeatherConditionSchema.options) {
       const rendered = renderMonitor(
@@ -580,7 +605,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["PICK", "DAY", "12"]);
+    ).toEqual(["PICKUP", "DAY", "12"]);
     expect(
       textsFor(
         renderMonitor(model({ statusReceivedAtMs: now - 80_000 }), config, now).payload,

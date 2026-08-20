@@ -111,7 +111,7 @@ const COLORS = {
   transparent: "#00000000",
 } as const;
 
-const PICKUP_FRONT_LABEL = "PICK";
+const PICKUP_FRONT_LABEL = "PICKUP";
 const PICKUP_REAR_LABEL = "PICKUPS";
 
 type Gradient = readonly [string, string];

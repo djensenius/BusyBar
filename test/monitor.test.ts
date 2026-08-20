@@ -153,7 +153,7 @@ describe("monitor lifecycle", () => {
     monitor.updateStatus({ ...status("idle"), id: 3 });
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "PICK",
+      "PICKUP",
       "DAY",
       "12",
     ]);
@@ -170,7 +170,7 @@ describe("monitor lifecycle", () => {
 
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "PICK",
+      "PICKUP",
       "DAY",
       "12",
     ]);
@@ -182,7 +182,7 @@ describe("monitor lifecycle", () => {
     ]);
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "PICK",
+      "PICKUP",
       "ALL",
       "342",
     ]);
@@ -202,13 +202,13 @@ describe("monitor lifecycle", () => {
 
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "PICK",
+      "PICKUP",
       "DAY",
       "12",
     ]);
     for (const expected of [
       ["MSGS", "DAY", "8"],
-      ["PICK", "ALL", "342"],
+      ["PICKUP", "ALL", "342"],
       ["MSGS", "ALL", "187"],
       ["NO SEL", "DAY", "3"],
       ["WRONG", "DAY", "5"],
@@ -246,7 +246,7 @@ describe("monitor lifecycle", () => {
     monitor.updateStatus({ ...first, repeatCount: 2 });
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "PICK",
+      "PICKUP",
       "ALL",
       "--",
     ]);
