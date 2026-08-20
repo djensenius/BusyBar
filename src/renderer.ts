@@ -383,11 +383,7 @@ export const availableFrontFrames = (
                 ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
                 ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
               ];
-  return selectedFrames.length > 0
-    ? selectedFrames
-    : telephoneFrames.length > 0
-      ? telephoneFrames
-      : [...CORE_ALL_TIME_TELEPHONE_FRAMES];
+  return selectedFrames.length > 0 ? selectedFrames : telephoneFrames;
 };
 
 const healthPresentation = (
