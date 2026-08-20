@@ -247,6 +247,18 @@ const designs = [
   },
   {
     kind: "booth",
+    name: "Idle - messages listened overall",
+    label: "LISTEN",
+    period: "ALL",
+    value: "48",
+    start: COLORS.blueDark,
+    end: COLORS.cyanDark,
+    accent: COLORS.cyan,
+    accentText: COLORS.black,
+    mode: "idle",
+  },
+  {
+    kind: "booth",
     name: "Idle - no selection today",
     label: "NO SEL",
     period: "DAY",

@@ -103,6 +103,7 @@ describe("Operator REST client", () => {
           interactionsTotal: 144,
           callsTotal: 120,
           messagesTotal: 80,
+          messagePlaybackStartsTotal: 0,
           breakdownToday: {
             noSelection: 3,
             wrongNumberAttempts: 5,
@@ -122,6 +123,7 @@ describe("Operator REST client", () => {
     ).resolves.toMatchObject({
       interactionsToday: 14,
       interactionsTotal: 144,
+      messagePlaybackStartsTotal: 0,
       breakdownToday: {
         noSelection: 3,
         wrongNumberAttempts: 5,

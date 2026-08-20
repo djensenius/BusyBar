@@ -21,8 +21,10 @@ const nextFrontFrame = (
   current: MonitorState["frontFrame"],
   frames: readonly MonitorState["frontFrame"][],
 ): MonitorState["frontFrame"] => {
+  if (frames.length === 0) return DEFAULT_FRONT_FRAME;
   const index = frames.indexOf(current);
-  return frames[(index + 1) % frames.length] ?? frames[0] ?? DEFAULT_FRONT_FRAME;
+  const currentIndex = index >= 0 ? index : 0;
+  return frames[(currentIndex + 1) % frames.length] ?? frames[0] ?? DEFAULT_FRONT_FRAME;
 };
 
 const IDLE_MODES: readonly IdleMode[] = [

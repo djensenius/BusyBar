@@ -36,6 +36,7 @@ describe("monitor summary schema", () => {
         callsToday: 12,
         interactionsTotal: 144,
         callsTotal: 120,
+        messagePlaybackStartsTotal: 0,
         breakdownToday: {
           noSelection: 3,
           wrongNumberAttempts: 5,
@@ -49,6 +50,7 @@ describe("monitor summary schema", () => {
       messagesToday: 8,
       interactionsTotal: 144,
       messagesTotal: 80,
+      messagePlaybackStartsTotal: 0,
       breakdownToday: {
         noSelection: 3,
         wrongNumberAttempts: 5,

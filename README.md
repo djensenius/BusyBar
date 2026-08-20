@@ -27,8 +27,11 @@ gradient cards:
 - `MSGS / DAY / n`
 - `PICKUP / ALL / n`
 - `MSGS / ALL / n`
+- When the Operator summary includes `messagePlaybackStartsTotal`, `LISTEN / ALL / n`
 - When the Operator summary includes `breakdownToday`, daily `NO SEL`,
   `WRONG`, `LEFT`, `LISTEN`, and `INSTR` cards
+- Any `DAY` card with an explicit value of `0` is omitted, while unknown or
+  missing values still render as unavailable (`--`)
 - A 24-hour local clock with a weekday/date card
 - Current weather, when Home Assistant weather is configured
 
@@ -193,5 +196,6 @@ polls will log `404` until the endpoint is available.
 
 During the rolling additive analytics rollout, older summary payloads still
 drive the four core `PICKUP`/`MSGS` day and all-time pickup cards. Matching
-Operator releases automatically add the five daily breakout cards and the rear
-overview breakout from the additive `interactions*` fields.
+Operator releases automatically add the optional `LISTEN / ALL` card, the five
+daily breakout cards, and the rear overview breakout from the additive
+`interactions*` fields.
