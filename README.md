@@ -28,9 +28,9 @@ gradient cards:
 - `PICKUP / ALL / n`
 - `MSGS / ALL / n`
 - When the Operator summary includes `messagePlaybackStartsTotal`, `LISTEN / ALL / n`
-- When the Operator summary includes `breakdownToday`, daily `NO SEL`,
+- When the Operator summary includes `breakdownToday`, daily `NO DIAL`,
   `WRONG`, `LEFT`, `LISTEN`, and `INSTR` cards
-- Fresh booth telemetry adds a fan cooling gauge and the Pi CPU temperature
+- Fresh booth telemetry adds a four-step fan cooling meter and the Pi CPU temperature
 - Fresh router component telemetry adds battery charge and battery temperature
   cards
 - Any rendered `DAY` card with an explicit value of `0` is omitted
@@ -59,7 +59,7 @@ or wind-chill difference, then the daily high and low.
 ## Rear display
 
 The rear display keeps the booth overview, vitals, network, and `SMART HOME`
-pages. The vitals page combines a radial fan gauge with Pi temperature, CPU,
+pages. The vitals page combines a four-step fan meter with Pi temperature, CPU,
 memory, and uptime plus router battery charge, temperature, voltage, and
 current. When the Operator summary includes
 `breakdownToday`, the booth overview compacts the current-day pickup

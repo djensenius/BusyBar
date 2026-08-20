@@ -109,6 +109,7 @@ const COLORS = {
   amberDark: "#865B00FF",
   cyan: "#00C8FFFF",
   cyanDark: "#006A85FF",
+  cyanMuted: "#43A9BCFF",
   red: "#FB2C36FF",
   redDark: "#7A1118FF",
   violet: "#A855F7FF",
@@ -334,15 +335,21 @@ interface FanCoolingPresentation {
   readonly label: "OFF" | "LOW" | "MEDIUM" | "HIGH" | "MAX" | "ON";
 }
 
+type FanLevelStep = 0 | 1 | 2 | 3 | 4;
+
 const clampRatio = (value: number): number => Math.max(0, Math.min(1, value));
 
-const fanLevelLabel = (ratio: number): FanCoolingPresentation["label"] => {
-  if (ratio <= 0) return "OFF";
-  if (ratio <= 0.32) return "LOW";
-  if (ratio <= 0.52) return "MEDIUM";
-  if (ratio <= 0.82) return "HIGH";
-  return "MAX";
+const fanLevelStep = (ratio: number): FanLevelStep => {
+  const value = clampRatio(ratio);
+  if (value <= 0) return 0;
+  if (value <= 0.32) return 1;
+  if (value <= 0.52) return 2;
+  if (value <= 0.82) return 3;
+  return 4;
 };
+
+const fanLevelLabel = (ratio: number): FanCoolingPresentation["label"] =>
+  (["OFF", "LOW", "MEDIUM", "HIGH", "MAX"] as const)[fanLevelStep(ratio)];
 
 const fanCoolingPresentation = (
   fan: BoothFanStats | null | undefined,
@@ -623,47 +630,25 @@ const compactUptime = (seconds: number | null | undefined): string => {
   return `${hours}H ${minutes % 60}M`;
 };
 
-const fanGaugeBackElements = (fan: FanCoolingPresentation | null): RectangleElement[] => {
-  const centerX = 31;
-  const centerY = 57;
+const fanLevelBackElements = (fan: FanCoolingPresentation | null): RectangleElement[] => {
   const ratio = fan?.ratio ?? 0;
-  const activeTicks = fan ? Math.ceil(clampRatio(ratio) * 10) : 0;
-  const ticks = [
-    [10, 55],
-    [8, 47],
-    [11, 39],
-    [17, 32],
-    [25, 28],
-    [34, 28],
-    [42, 32],
-    [48, 39],
-    [51, 47],
-    [50, 55],
+  const step = fan ? fanLevelStep(ratio) : 0;
+  const bars = [
+    [8, 50, 8, 10],
+    [20, 42, 8, 18],
+    [32, 34, 8, 26],
+    [44, 26, 8, 34],
   ] as const;
-  const angle = Math.PI * (1.25 + clampRatio(ratio) * 0.5);
-  const needle = [0.35, 0.68, 1].map(
-    (distance) =>
-      [
-        Math.round(centerX + Math.cos(angle) * 18 * distance),
-        Math.round(centerY + Math.sin(angle) * 18 * distance),
-      ] as const,
+  return bars.map(([x, y, width, height], index) =>
+    backRectangle(
+      `back-fan-level-${index}`,
+      x,
+      y,
+      width,
+      height,
+      index < step ? COLORS.white : COLORS.slate,
+    ),
   );
-  return [
-    ...ticks.map(([x, y], index) =>
-      backRectangle(
-        `back-fan-tick-${index}`,
-        x,
-        y,
-        3,
-        3,
-        index < activeTicks ? COLORS.white : COLORS.slate,
-      ),
-    ),
-    backRectangle("back-fan-hub", centerX - 2, centerY - 2, 5, 5, COLORS.white),
-    ...needle.map(([x, y], index) =>
-      backRectangle(`back-fan-needle-${index}`, x - 1, y - 1, 3, 3, COLORS.white),
-    ),
-  ];
 };
 
 const systemVitalsBackPresentation = (
@@ -686,7 +671,7 @@ const systemVitalsBackPresentation = (
       backRectangle("back-vitals-header-rule", 0, 11, 160, 1, COLORS.slate),
       backRectangle("back-vitals-fan-rule", 64, 14, 1, 64, COLORS.slate),
       backRectangle("back-vitals-pi-rule", 113, 14, 1, 64, COLORS.slate),
-      ...fanGaugeBackElements(fan),
+      ...fanLevelBackElements(fan),
       backText("back-vitals-title", "BOOTH VITALS", 2, 1, "bold"),
       backText("back-vitals-fan", "FAN", 4, 15, "small", COLORS.ice),
       backText("back-vitals-fan-level", fan?.label ?? "--", 4, 68, "small"),
@@ -855,7 +840,7 @@ const backLines = (
     if (breakdown) {
       return [
         today,
-        `NO SEL ${summaryCount(breakdown.noSelection)} WRONG ${summaryCount(breakdown.wrongNumberAttempts)}`,
+        `NO DIAL ${summaryCount(breakdown.noSelection)} WRONG ${summaryCount(breakdown.wrongNumberAttempts)}`,
         `LEFT ${summaryCount(breakdown.messagesLeft)} LISTEN ${summaryCount(breakdown.messagePlaybackStarts)}`,
         `INSTR ${summaryCount(breakdown.instructionPlaybackStarts)}`,
         `STATE ${status?.state ?? "--"} AGE ${age}`,
@@ -1039,7 +1024,7 @@ const summaryFrameCard = (
       );
     case "noSelectionToday":
       return summaryCard(
-        "NO SEL",
+        "NO DIAL",
         "DAY",
         summary?.breakdownToday?.noSelection,
         [COLORS.amberDark, COLORS.amber],
@@ -1162,50 +1147,37 @@ const vitalCardElements = (
   ),
 ];
 
-const fanGaugeElements = (ratio: number, color: string): RectangleElement[] => {
-  const ticks = [
-    [55, 9, 2, 4],
-    [57, 4, 3, 2],
-    [62, 2, 4, 2],
-    [68, 5, 2, 5],
+const fanLevelMeterElements = (
+  ratio: number,
+  activeColor: string,
+  trackColor: string,
+): RectangleElement[] => {
+  const bars = [
+    [55, 10, 3, 3],
+    [59, 8, 3, 5],
+    [63, 5, 3, 8],
+    [67, 2, 3, 11],
   ] as const;
-  const step = Math.min(4, Math.ceil(clampRatio(ratio) * 4));
-  const needleByStep = [
-    [[61, 11, 3, 3]],
-    [
-      [61, 11, 3, 3],
-      [59, 9, 2, 2],
-      [58, 7, 2, 2],
-      [57, 5, 2, 2],
-    ],
-    [
-      [61, 11, 3, 3],
-      [60, 9, 2, 2],
-      [59, 7, 2, 2],
-      [59, 5, 2, 2],
-    ],
-    [
-      [61, 11, 3, 3],
-      [63, 8, 2, 3],
-      [65, 5, 2, 3],
-    ],
-    [
-      [61, 11, 3, 3],
-      [64, 10, 5, 2],
-    ],
-  ] as const;
-  return [...ticks.slice(0, step), ...(needleByStep[step] ?? needleByStep[0])].map(
-    ([x, y, width, height], index) =>
-      frontRectangle(`front-fan-gauge-${index}`, x, y, width, height, color),
+  const step = fanLevelStep(ratio);
+  return bars.map(([x, y, width, height], index) =>
+    frontRectangle(
+      `front-fan-level-${index}`,
+      x,
+      y,
+      width,
+      height,
+      index < step ? activeColor : trackColor,
+    ),
   );
 };
 
 const fanVitalPresentation = (fan: FanCoolingPresentation, dark: boolean): FrontPresentation => {
-  const gaugeColor = dark ? COLORS.cyan : COLORS.black;
+  const meterActiveColor = dark ? COLORS.cyan : COLORS.black;
+  const meterTrackColor = dark ? COLORS.cyanDark : COLORS.cyanMuted;
   return {
     elements: [
       ...vitalCardElements("FAN", fan.label, [COLORS.blueDark, COLORS.cyanDark], COLORS.cyan, dark),
-      ...fanGaugeElements(fan.ratio, gaugeColor),
+      ...fanLevelMeterElements(fan.ratio, meterActiveColor, meterTrackColor),
     ],
   };
 };
