@@ -535,7 +535,7 @@ describe("monitor renderer", () => {
       config,
       now,
     ).payload;
-    expect(textsFor(batteryTemperature, "front")).toEqual(["BAT TEMP", "ROUTER", "32"]);
+    expect(textsFor(batteryTemperature, "front")).toEqual(["BATTERY", "ROUTER", "32"]);
   });
 
   it("drops stale booth vitals from the carousel", () => {

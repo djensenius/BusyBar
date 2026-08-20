@@ -1279,7 +1279,7 @@ const vitalPresentation = (
       );
     case "routerBatteryTemperature":
       return numericVitalPresentation(
-        "BAT TEMP",
+        "BATTERY",
         "ROUTER",
         battery?.temperatureCelsius == null ? "--" : String(Math.round(battery.temperatureCelsius)),
         [COLORS.amberDark, COLORS.slate],

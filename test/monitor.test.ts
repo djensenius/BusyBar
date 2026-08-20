@@ -260,7 +260,7 @@ describe("monitor lifecycle", () => {
       ["FAN", "MEDIUM"],
       ["PI", "CPU TEMP", "49"],
       ["BATTERY", "ROUTER", "78%"],
-      ["BAT TEMP", "ROUTER", "32"],
+      ["BATTERY", "ROUTER", "32"],
     ]) {
       await vi.advanceTimersByTimeAsync(
         expected[0] === "PICKUP" && expected[1] === "DAY"
