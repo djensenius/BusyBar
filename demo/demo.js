@@ -200,7 +200,7 @@ const designs = [
   {
     kind: "booth",
     name: "Idle - pickups today",
-    label: "PICK",
+    label: "PICKUP",
     period: "DAY",
     value: "12",
     start: COLORS.blueDark,
@@ -224,7 +224,7 @@ const designs = [
   {
     kind: "booth",
     name: "Idle - pickups overall",
-    label: "PICK",
+    label: "PICKUP",
     period: "ALL",
     value: "342",
     start: COLORS.blueDark,

@@ -23,9 +23,9 @@ states, and warnings. The self-contained GitHub Pages source lives in
 While the booth is healthy and idle, the front rotates through full-width
 gradient cards:
 
-- `PICK / DAY / n`
+- `PICKUP / DAY / n`
 - `MSGS / DAY / n`
-- `PICK / ALL / n`
+- `PICKUP / ALL / n`
 - `MSGS / ALL / n`
 - When the Operator summary includes `breakdownToday`, daily `NO SEL`,
   `WRONG`, `LEFT`, `LISTEN`, and `INSTR` cards
@@ -192,6 +192,6 @@ this worker. Older Operator releases still provide state and health, but summary
 polls will log `404` until the endpoint is available.
 
 During the rolling additive analytics rollout, older summary payloads still
-drive the four core `PICK`/`MSGS` day and all-time pickup cards. Matching
+drive the four core `PICKUP`/`MSGS` day and all-time pickup cards. Matching
 Operator releases automatically add the five daily breakout cards and the rear
 overview breakout from the additive `interactions*` fields.
