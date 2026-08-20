@@ -246,6 +246,12 @@ const frontRectangleElements = (payload: DisplayDrawParams): RectangleElement[] 
       element.display === "front" && element.type === "rectangle",
   );
 
+const backRectangleElements = (payload: DisplayDrawParams): RectangleElement[] =>
+  payload.elements.filter(
+    (element): element is RectangleElement =>
+      element.display === "back" && element.type === "rectangle",
+  );
+
 const frontElementIds = (payload: DisplayDrawParams): string[] =>
   payload.elements
     .filter((element) => element.display === "front")
@@ -343,7 +349,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["NO SEL", "DAY", "3"]);
+    ).toEqual(["NO DIAL", "DAY", "3"]);
     expect(
       textsFor(
         renderMonitor(
@@ -500,7 +506,7 @@ describe("monitor renderer", () => {
     ]);
   });
 
-  it("adds booth vitals with a visual fan gauge and numeric temperature cards", () => {
+  it("adds booth vitals with a four-step fan meter and numeric temperature cards", () => {
     const state = model({
       idleMode: "telephone",
       summary,
@@ -519,6 +525,39 @@ describe("monitor renderer", () => {
     expect(textsFor(fan, "front")).toEqual(["FAN", "MEDIUM"]);
     expect(textsFor(fan, "front")).not.toContain("4250");
     expect(frontRectangleElements(fan)).toHaveLength(24);
+    expect(frontRectangleElements(fan).filter((element) => element.x >= 53)).toHaveLength(5);
+    expect(frontRectangleElements(fan)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          x: 55,
+          y: 10,
+          width: 3,
+          height: 3,
+          fill_colors: ["#041616FF"],
+        }),
+        expect.objectContaining({
+          x: 59,
+          y: 8,
+          width: 3,
+          height: 5,
+          fill_colors: ["#041616FF"],
+        }),
+        expect.objectContaining({
+          x: 63,
+          y: 5,
+          width: 3,
+          height: 8,
+          fill_colors: ["#43A9BCFF"],
+        }),
+        expect.objectContaining({
+          x: 67,
+          y: 2,
+          width: 3,
+          height: 11,
+          fill_colors: ["#43A9BCFF"],
+        }),
+      ]),
+    );
 
     const pi = renderMonitor({ ...state, frontFrame: "piCpuTemperature" }, config, now).payload;
     expect(textsFor(pi, "front")).toEqual(["PI", "CPU TEMP", "49"]);
@@ -585,11 +624,39 @@ describe("monitor renderer", () => {
       "VOLT 3.88 V",
       "CURR -0.42 A",
     ]);
-    expect(
-      rendered.elements.filter(
-        (element) => element.display === "back" && element.type === "rectangle",
-      ),
-    ).toHaveLength(18);
+    expect(backRectangleElements(rendered)).toHaveLength(18);
+    expect(backRectangleElements(rendered)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          x: 8,
+          y: 50,
+          width: 8,
+          height: 10,
+          fill_colors: ["#FFFFFFFF"],
+        }),
+        expect.objectContaining({
+          x: 20,
+          y: 42,
+          width: 8,
+          height: 18,
+          fill_colors: ["#FFFFFFFF"],
+        }),
+        expect.objectContaining({
+          x: 32,
+          y: 34,
+          width: 8,
+          height: 26,
+          fill_colors: ["#34445CFF"],
+        }),
+        expect.objectContaining({
+          x: 44,
+          y: 26,
+          width: 8,
+          height: 34,
+          fill_colors: ["#34445CFF"],
+        }),
+      ]),
+    );
   });
 
   it("keeps unknown pickup-day summaries available instead of treating them as zero", () => {
@@ -704,7 +771,7 @@ describe("monitor renderer", () => {
       textsFor(renderMonitor(model({ summary: breakdownSummary }), smartHomeConfig, now).payload, "back"),
     ).toEqual([
       "DAY PICKUPS 12 MSGS 8",
-      "NO SEL 3 WRONG 5",
+      "NO DIAL 3 WRONG 5",
       "LEFT 4 LISTEN 7",
       "INSTR 6",
       "STATE idle AGE 1s",

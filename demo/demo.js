@@ -8,6 +8,7 @@ const COLORS = {
   amberDark: "#865b00",
   cyan: "#00c8ff",
   cyanDark: "#006a85",
+  cyanMuted: "#43a9bc",
   red: "#fb2c36",
   redDark: "#7a1118",
   violet: "#a855f7",
@@ -259,8 +260,8 @@ const designs = [
   },
   {
     kind: "booth",
-    name: "Idle - no selection today",
-    label: "NO SEL",
+    name: "Idle - no dial today",
+    label: "NO DIAL",
     period: "DAY",
     value: "3",
     start: COLORS.amberDark,
@@ -496,43 +497,19 @@ const drawDegree = (context, x, y, color) => {
   context.fillRect(x + 1, y + 3, 2, 1);
 };
 
-const drawFanGauge = (context, ratio, color) => {
-  const ticks = [
-    [55, 9, 2, 4],
-    [57, 4, 3, 2],
-    [62, 2, 4, 2],
-    [68, 5, 2, 5],
+const drawFanLevelMeter = (context, ratio, activeColor, trackColor) => {
+  const bars = [
+    [55, 10, 3, 3],
+    [59, 8, 3, 5],
+    [63, 5, 3, 8],
+    [67, 2, 3, 11],
   ];
-  const step = Math.min(4, Math.ceil(Math.max(0, Math.min(1, ratio)) * 4));
-  const needleByStep = [
-    [[61, 11, 3, 3]],
-    [
-      [61, 11, 3, 3],
-      [59, 9, 2, 2],
-      [58, 7, 2, 2],
-      [57, 5, 2, 2],
-    ],
-    [
-      [61, 11, 3, 3],
-      [60, 9, 2, 2],
-      [59, 7, 2, 2],
-      [59, 5, 2, 2],
-    ],
-    [
-      [61, 11, 3, 3],
-      [63, 8, 2, 3],
-      [65, 5, 2, 3],
-    ],
-    [
-      [61, 11, 3, 3],
-      [64, 10, 5, 2],
-    ],
-  ];
-  context.fillStyle = color;
-  for (const [x, y, width, height] of [
-    ...ticks.slice(0, step),
-    ...(needleByStep[step] ?? needleByStep[0]),
-  ]) {
+  const value = Math.max(0, Math.min(1, ratio));
+  const step =
+    value <= 0 ? 0 : value <= 0.32 ? 1 : value <= 0.52 ? 2 : value <= 0.82 ? 3 : 4;
+
+  for (const [index, [x, y, width, height]] of bars.entries()) {
+    context.fillStyle = index < step ? activeColor : trackColor;
     context.fillRect(x, y, width, height);
   }
 };
@@ -552,7 +529,7 @@ const drawVital = (context, design) => {
   context.fillText(design.detail, 18, 10);
 
   if (design.metric === "fan") {
-    drawFanGauge(context, design.ratio, design.accentText);
+    drawFanLevelMeter(context, design.ratio, design.accentText, COLORS.cyanMuted);
     return;
   }
 
