@@ -307,6 +307,70 @@ describe("monitor renderer", () => {
     ]);
   });
 
+  it("renders full counts above 999 with responsive sizing", () => {
+    const highCountSummary: MonitorSummary = {
+      ...breakdownSummary,
+      interactionsToday: 1_000,
+      messagesToday: 2_345,
+      interactionsTotal: 123_456,
+      breakdownToday: {
+        noSelection: 3_456,
+        wrongNumberAttempts: 4_567,
+        messagesLeft: 5_678,
+        messagePlaybackStarts: 6_789,
+        instructionPlaybackStarts: 7_890,
+      },
+    };
+    const fourDigitFront = renderMonitor(
+      model({ frontFrame: "interactionsToday", summary: highCountSummary }),
+      config,
+      now,
+    ).payload;
+
+    expect(textsFor(fourDigitFront, "front")).toEqual(["PICKUP", "DAY", "1000"]);
+    expect(
+      frontTextElements(fourDigitFront).find((element) => element.text === "1000"),
+    ).toMatchObject({
+      x: 62.5,
+      font: "small",
+    });
+
+    const sixDigitFront = renderMonitor(
+      model({ frontFrame: "interactionsTotal", summary: highCountSummary }),
+      config,
+      now,
+    ).payload;
+    expect(textsFor(sixDigitFront, "front")).toEqual(["PICKUP", "ALL", "123456"]);
+    expect(
+      frontTextElements(sixDigitFront).find((element) => element.text === "123456"),
+    ).toMatchObject({
+      x: 36,
+      font: "small",
+    });
+    expect(frontRectangleElements(sixDigitFront)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          x: 0,
+          y: 6,
+          width: 72,
+          height: 10,
+        }),
+      ]),
+    );
+
+    expect(
+      textsFor(renderMonitor(model({ summary: highCountSummary }), config, now).payload, "back"),
+    ).toEqual([
+      "DAY PICKUPS 1000 MSGS 2345",
+      "NO DIAL 3456 WRONG 4567",
+      "LEFT 5678 LISTEN 6789",
+      "INSTR 7890",
+      "STATE idle AGE 1s",
+      "QUESTION -- MESSAGE --",
+      "ERROR CLEAR VIEW ALL",
+    ]);
+  });
+
   it("uses the supported small font for six-character pickup labels", () => {
     const rendered = renderMonitor(
       model({ frontFrame: "interactionsToday", summary }),
