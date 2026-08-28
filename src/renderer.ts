@@ -133,6 +133,7 @@ const FRONT_RECTANGLE_SLOT_COUNT = 24;
 const FRONT_TEXT_SLOT_COUNT = 5;
 const BACK_RECTANGLE_SLOT_COUNT = 18;
 const BACK_TEXT_SLOT_COUNT = 14;
+const COMPACT_SUMMARY_COUNT_MAX_LENGTH = 5;
 
 interface FrontPresentation {
   readonly elements: DisplayElement[];
@@ -873,10 +874,8 @@ const backLines = (
   return smartHomeBackLines(state, config);
 };
 
-const compactCount = (count: number): string => (count > 999 ? "999+" : String(count));
-
 const summaryCount = (count: number | undefined): string =>
-  count === undefined ? "--" : compactCount(count);
+  count === undefined ? "--" : String(count);
 
 const idleModePresentation = (
   mode: IdleMode,
@@ -1074,6 +1073,49 @@ const summaryPresentation = (
   const themedBackground: Gradient = dark
     ? [COLORS.trueBlack, COLORS.trueBlack]
     : background;
+  if (count.length > COMPACT_SUMMARY_COUNT_MAX_LENGTH) {
+    return {
+      elements: [
+        frontBackground(themedBackground),
+        frontRectangle(
+          "front-count-wide-badge",
+          0,
+          6,
+          72,
+          10,
+          dark ? COLORS.trueBlack : accent,
+        ),
+        frontText(
+          "front-count-label",
+          label,
+          2,
+          0,
+          "tiny",
+          dark ? accent : COLORS.white,
+          "top_left",
+        ),
+        frontText(
+          "front-count-period",
+          period,
+          70,
+          0,
+          "tiny",
+          dark ? COLORS.ice : COLORS.white,
+          "top_right",
+        ),
+        frontText(
+          "front-count-value",
+          count,
+          36,
+          11,
+          "small",
+          dark ? accent : COLORS.black,
+          "center",
+        ),
+      ],
+    };
+  }
+
   return {
     elements: [
       frontBackground(themedBackground),
