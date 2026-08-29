@@ -275,7 +275,7 @@ const statePresentation = (state: Exclude<BoothState, "idle">): FrontPresentatio
     return labelPresentation(
       "CALLING",
       [COLORS.amberDark, COLORS.amber],
-      boothArtElements("front-booth", "calling"),
+      boothArtElements("front-booth", "active"),
       44,
     );
   }

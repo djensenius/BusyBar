@@ -51,7 +51,7 @@ const rectangles = (
     frontRectangle(`${prefix}-${index}`, x, y, width, height, color),
   );
 
-export type BoothArtMode = "idle" | "active" | "calling" | "recording";
+export type BoothArtMode = "idle" | "active" | "recording";
 
 export const boothArtElements = (prefix: string, mode: BoothArtMode): RectangleElement[] => [
   frontRectangle(`${prefix}-panel`, 0, 0, 16, 16, PANEL),
@@ -83,13 +83,6 @@ export const boothArtElements = (prefix: string, mode: BoothArtMode): RectangleE
     [8, 8, 1, 1],
   ]),
   frontRectangle(`${prefix}-phone-highlight`, 10, 6, 1, 1, BOOTH_SIGN),
-  ...(mode === "calling"
-    ? rectangles(`${prefix}-ring`, SUN, [
-        [14, 4, 1, 2],
-        [15, 7, 1, 2],
-        [14, 10, 1, 2],
-      ])
-    : []),
 ];
 
 export const warningArtElements = (
