@@ -982,6 +982,10 @@ describe("monitor renderer", () => {
   });
 
   it("pins active and critical states", () => {
+    const calling = renderMonitor(model({ status: status("dialing") }), config, now).payload;
+    expect(textsFor(calling, "front")).toEqual(["CALLING"]);
+    expect(frontFillColors(calling)).not.toContain("#FFD057FF");
+
     expect(
       textsFor(renderMonitor(model({ status: status("recording") }), config, now).payload, "front"),
     ).toEqual(["RECORDING"]);

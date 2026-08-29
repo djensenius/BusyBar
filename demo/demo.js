@@ -384,7 +384,7 @@ const designs = [
     start: COLORS.amberDark,
     end: COLORS.amber,
     accent: COLORS.amber,
-    mode: "calling",
+    mode: "active",
   },
   {
     kind: "booth",
@@ -450,13 +450,6 @@ const drawBooth = (context, mode, blink) => {
   context.fillRect(8, 8, 1, 1);
   context.fillStyle = "#dcecff";
   context.fillRect(10, 6, 1, 1);
-
-  if (mode === "calling" && blink) {
-    context.fillStyle = COLORS.yellow;
-    context.fillRect(14, 4, 1, 2);
-    context.fillRect(15, 7, 1, 2);
-    context.fillRect(14, 10, 1, 2);
-  }
 };
 
 const drawBoothText = (context, design) => {
