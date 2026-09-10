@@ -255,7 +255,10 @@ const backRectangleElements = (payload: DisplayDrawParams): RectangleElement[] =
 const frontElementIds = (payload: DisplayDrawParams): string[] =>
   payload.elements
     .filter((element) => element.display === "front")
-    .map((element) => element.id!);
+    .map((element) => {
+      if (element.id === undefined) throw new Error("Front display element is missing an ID");
+      return element.id;
+    });
 
 const frontFillColors = (payload: DisplayDrawParams): string[] =>
   payload.elements.flatMap((element) =>
