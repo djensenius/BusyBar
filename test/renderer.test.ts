@@ -255,12 +255,15 @@ const backRectangleElements = (payload: DisplayDrawParams): RectangleElement[] =
 const frontElementIds = (payload: DisplayDrawParams): string[] =>
   payload.elements
     .filter((element) => element.display === "front")
-    .map((element) => element.id);
+    .map((element) => {
+      if (element.id === undefined) throw new Error("Front display element is missing an ID");
+      return element.id;
+    });
 
 const frontFillColors = (payload: DisplayDrawParams): string[] =>
   payload.elements.flatMap((element) =>
     element.display === "front" && element.type === "rectangle"
-      ? element.fill_colors
+      ? (element.fill_colors ?? [])
       : [],
   );
 
@@ -589,7 +592,11 @@ describe("monitor renderer", () => {
     expect(textsFor(fan, "front")).toEqual(["FAN", "MEDIUM"]);
     expect(textsFor(fan, "front")).not.toContain("4250");
     expect(frontRectangleElements(fan)).toHaveLength(24);
-    expect(frontRectangleElements(fan).filter((element) => element.x >= 53)).toHaveLength(5);
+    expect(
+      frontRectangleElements(fan).filter(
+        (element) => element.x !== undefined && element.x >= 53,
+      ),
+    ).toHaveLength(5);
     expect(frontRectangleElements(fan)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
