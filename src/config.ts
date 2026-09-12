@@ -20,6 +20,14 @@ export interface WeatherConfig extends HomeAssistantConfig {
   timeZone: string;
 }
 
+export interface FluxHausConfig {
+  url: string;
+  username: string;
+  password: string;
+  pollIntervalMs: number;
+  staleAfterMs: number;
+}
+
 export type MonitorConfig =
   | { enabled: false }
   | {
@@ -44,6 +52,7 @@ export type MonitorConfig =
       startToggleLightIds: string[];
       dialSceneId: string | null;
       weather: WeatherConfig | null;
+      fluxHaus: FluxHausConfig | null;
       audioEnabled: boolean;
       alertSound: string | null;
       alertCooldownMs: number;
@@ -271,6 +280,31 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
       timeZone,
     };
   }
+  const fluxHausEnabled = boolean(env, "BUSY_BAR_FLUXHAUS_ENABLED", false);
+  const fluxHausUrl = value(env.BUSY_BAR_FLUXHAUS_URL);
+  const fluxHausPassword = value(env.BUSY_BAR_FLUXHAUS_PASSWORD);
+  if (fluxHausEnabled && !fluxHausUrl) {
+    throw new ConfigurationError(
+      "BUSY_BAR_FLUXHAUS_URL is required when BUSY_BAR_FLUXHAUS_ENABLED=true.",
+    );
+  }
+  if (fluxHausEnabled && !fluxHausPassword) {
+    throw new ConfigurationError(
+      "BUSY_BAR_FLUXHAUS_PASSWORD is required when BUSY_BAR_FLUXHAUS_ENABLED=true.",
+    );
+  }
+  const fluxHaus =
+    fluxHausEnabled && fluxHausUrl && fluxHausPassword
+      ? {
+          url: url(fluxHausUrl, "BUSY_BAR_FLUXHAUS_URL", ["http:", "https:"]),
+          username: value(env.BUSY_BAR_FLUXHAUS_USERNAME) ?? "demo",
+          password: fluxHausPassword,
+          pollIntervalMs:
+            integer(env, "BUSY_BAR_FLUXHAUS_POLL_SECONDS", 10, 5, 3600) * 1000,
+          staleAfterMs:
+            integer(env, "BUSY_BAR_FLUXHAUS_STALE_AFTER_SECONDS", 120, 10, 86_400) * 1000,
+        }
+      : null;
 
   return {
     enabled: true,
@@ -302,6 +336,7 @@ export const resolveConfig = (env: NodeJS.ProcessEnv = process.env): MonitorConf
     startToggleLightIds,
     dialSceneId,
     weather,
+    fluxHaus,
     audioEnabled,
     alertSound,
     alertCooldownMs: integer(env, "BUSY_BAR_ALERT_COOLDOWN_SECONDS", 300, 10, 86_400) * 1000,

@@ -94,6 +94,162 @@ export const warningArtElements = (
   frontRectangle(`${prefix}-dot`, 7, 12, 2, 2, color),
 ];
 
+export type FluxHausIcon =
+  | "washer"
+  | "dryer"
+  | "dishwasher"
+  | "broombot"
+  | "mopbot"
+  | "airPurifier"
+  | "car"
+  | "complete";
+
+export const fluxHausIconElements = (
+  prefix: string,
+  icon: FluxHausIcon,
+  color: string,
+): RectangleElement[] => {
+  const panel = frontRectangle(`${prefix}-panel`, 0, 0, 19, 16, PANEL);
+  const parts = (specs: readonly RectSpec[]): RectangleElement[] =>
+    rectangles(`${prefix}-part`, color, specs);
+
+  if (icon === "washer" || icon === "dryer") {
+    return [
+      panel,
+      ...parts([
+        [3, 1, 12, 1],
+        [3, 14, 12, 1],
+        [3, 2, 1, 12],
+        [14, 2, 1, 12],
+        [5, 3, 2, 1],
+        [11, 3, 2, 1],
+        [5, 6, 1, 5],
+        [12, 6, 1, 5],
+        [6, 5, 6, 1],
+        [6, 11, 6, 1],
+        ...(icon === "dryer"
+          ? ([
+              [7, 7, 1, 3],
+              [9, 6, 1, 3],
+              [11, 7, 1, 3],
+            ] as const)
+          : ([
+              [6, 9, 2, 1],
+              [8, 10, 3, 1],
+              [11, 9, 1, 1],
+            ] as const)),
+      ]),
+    ];
+  }
+
+  if (icon === "dishwasher") {
+    return [
+      panel,
+      ...parts([
+        [3, 1, 12, 1],
+        [3, 2, 1, 12],
+        [14, 2, 1, 12],
+        [4, 4, 10, 1],
+        [4, 13, 10, 1],
+        [5, 10, 8, 1],
+        [6, 7, 1, 3],
+        [9, 6, 1, 4],
+        [12, 8, 1, 2],
+        [6, 3, 6, 1],
+      ]),
+    ];
+  }
+
+  if (icon === "broombot" || icon === "mopbot") {
+    return [
+      panel,
+      ...parts([
+        [5, 3, 8, 1],
+        [3, 5, 2, 6],
+        [13, 5, 2, 6],
+        [5, 12, 8, 1],
+        [4, 4, 2, 1],
+        [12, 4, 2, 1],
+        [4, 11, 2, 1],
+        [12, 11, 2, 1],
+        [8, 5, 2, 2],
+        [7, 9, 4, 1],
+        ...(icon === "mopbot"
+          ? ([
+              [8, 13, 2, 1],
+              [7, 14, 4, 1],
+              [1, 5, 1, 2],
+              [0, 7, 3, 2],
+            ] as const)
+          : ([
+              [1, 12, 4, 1],
+              [13, 12, 4, 1],
+              [2, 13, 1, 2],
+              [15, 13, 1, 2],
+            ] as const)),
+      ]),
+    ];
+  }
+
+  if (icon === "airPurifier") {
+    return [
+      panel,
+      ...parts([
+        [5, 1, 8, 1],
+        [5, 14, 8, 1],
+        [5, 2, 1, 12],
+        [12, 2, 1, 12],
+        [8, 4, 2, 2],
+        [7, 6, 1, 2],
+        [10, 6, 1, 2],
+        [8, 8, 2, 2],
+        [7, 12, 4, 1],
+        [15, 4, 2, 1],
+        [14, 7, 3, 1],
+        [15, 10, 2, 1],
+      ]),
+    ];
+  }
+
+  if (icon === "car") {
+    return [
+      panel,
+      ...parts([
+        [4, 6, 9, 1],
+        [2, 8, 14, 1],
+        [1, 9, 1, 3],
+        [16, 9, 1, 3],
+        [2, 12, 14, 1],
+        [5, 5, 7, 1],
+        [4, 7, 1, 1],
+        [13, 7, 1, 1],
+        [4, 11, 3, 3],
+        [12, 11, 3, 3],
+        [7, 7, 4, 1],
+      ]),
+      ...rectangles(`${prefix}-wheel`, PANEL, [
+        [5, 12, 1, 1],
+        [13, 12, 1, 1],
+      ]),
+    ];
+  }
+
+  return [
+    panel,
+    ...parts([
+      [3, 2, 12, 1],
+      [2, 3, 1, 10],
+      [15, 3, 1, 10],
+      [3, 13, 12, 1],
+      [5, 7, 2, 2],
+      [7, 9, 2, 2],
+      [8, 8, 2, 2],
+      [10, 6, 2, 2],
+      [12, 4, 2, 2],
+    ]),
+  ];
+};
+
 const iconPanel = (prefix: string): RectangleElement[] => [
   frontRectangle(`${prefix}-panel`, 0, 0, 18, 16, PANEL),
 ];

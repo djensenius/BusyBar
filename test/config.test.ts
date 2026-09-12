@@ -40,6 +40,7 @@ describe("monitor configuration", () => {
       startToggleLightIds: [],
       dialSceneId: null,
       weather: null,
+      fluxHaus: null,
       audioEnabled: false,
     });
   });
@@ -108,6 +109,27 @@ describe("monitor configuration", () => {
     });
   });
 
+  it("configures optional FluxHaus polling", () => {
+    expect(
+      resolveConfig({
+        ...base,
+        BUSY_BAR_FLUXHAUS_ENABLED: "true",
+        BUSY_BAR_FLUXHAUS_URL: "http://fluxhaus.local:8888",
+        BUSY_BAR_FLUXHAUS_PASSWORD: "read-only-password",
+        BUSY_BAR_FLUXHAUS_POLL_SECONDS: "15",
+        BUSY_BAR_FLUXHAUS_STALE_AFTER_SECONDS: "180",
+      }),
+    ).toMatchObject({
+      fluxHaus: {
+        url: "http://fluxhaus.local:8888",
+        username: "demo",
+        password: "read-only-password",
+        pollIntervalMs: 15_000,
+        staleAfterMs: 180_000,
+      },
+    });
+  });
+
   it("configures password-protected local input", () => {
     expect(
       resolveConfig({
@@ -156,6 +178,19 @@ describe("monitor configuration", () => {
     expect(() => resolveConfig({ ...base, BUSY_BAR_AUDIO_ENABLED: "true" })).toThrow(
       "BUSY_BAR_ALERT_SOUND",
     );
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_FLUXHAUS_ENABLED: "true",
+      }),
+    ).toThrow("BUSY_BAR_FLUXHAUS_URL");
+    expect(() =>
+      resolveConfig({
+        ...base,
+        BUSY_BAR_FLUXHAUS_ENABLED: "true",
+        BUSY_BAR_FLUXHAUS_URL: "https://haus.example.com",
+      }),
+    ).toThrow("BUSY_BAR_FLUXHAUS_PASSWORD");
     expect(() =>
       resolveConfig({ ...base, BUSY_BAR_LOCAL_URL: "http://192.168.1.247" }),
     ).toThrow("configured together");
