@@ -400,6 +400,12 @@ export class Monitor {
       sourceAtMs === this.#fluxHausSourceAtMs &&
       sourceSignature === this.#fluxHausSourceSignature
     ) {
+      this.#state = {
+        ...this.#state,
+        fluxHausReceivedAtMs: Math.min(receivedAtMs, Date.now()),
+      };
+      this.#showNextCompletion();
+      this.#scheduleRender();
       return;
     }
 
@@ -416,8 +422,8 @@ export class Monitor {
           const previous = previousById.get(id);
           const next = nextById.get(id);
           return previous &&
-            (previous.lifecycle === "active" || previous.lifecycle === "paused") &&
-            next?.lifecycle === "finished"
+            previous.active &&
+            (next?.lifecycle === "finished" || next?.lifecycle === "inactive")
             ? [{ id, label: next.name, occurredAtMs: receivedAtMs } satisfies CompletionAlert]
             : [];
         })
@@ -440,7 +446,13 @@ export class Monitor {
     this.#state = nextState;
     for (const alert of completed) {
       this.#completionQueue.push(alert);
-      if (this.#completionQueue.length > COMPLETION_QUEUE_LIMIT) this.#completionQueue.shift();
+      if (this.#completionQueue.length > COMPLETION_QUEUE_LIMIT) {
+        const dropped = this.#completionQueue.shift();
+        log.warn(
+          { device: dropped?.id, queueLimit: COMPLETION_QUEUE_LIMIT },
+          "BUSY Bar completion alert queue limit reached; dropped oldest alert",
+        );
+      }
     }
     this.#showNextCompletion();
     this.#scheduleRender();

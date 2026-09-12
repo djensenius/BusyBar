@@ -549,6 +549,42 @@ describe("monitor renderer", () => {
     ).toEqual(["CAR", "356KM 12M", "78%"]);
   });
 
+  it("renders robot elapsed time when battery is unavailable", () => {
+    const robotSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "broombot",
+          name: "BroomBot",
+          active: true,
+          lifecycle: "active",
+          status: "Cleaning",
+          detail: null,
+          progressPercent: null,
+          remainingSeconds: null,
+          elapsedSeconds: 15 * 60,
+          batteryPercent: null,
+          updatedAt: new Date(now - 15 * 60_000).toISOString(),
+        },
+      ],
+    };
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausBroombot",
+            fluxHaus: robotSnapshot,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["BROOM", "CLEANING", "15M"]);
+  });
+
   it("bounds long FluxHaus labels and values to their card regions", () => {
     const longLabels: FluxHausSnapshot = {
       ...fluxHaus,

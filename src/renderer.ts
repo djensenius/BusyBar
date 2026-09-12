@@ -1538,6 +1538,7 @@ const fluxHausPresentation = (
   };
   const value =
     compactDuration(device.remainingSeconds) ??
+    compactDuration(device.elapsedSeconds ?? null) ??
     (device.batteryPercent === null
       ? device.progressPercent === null
         ? "ON"

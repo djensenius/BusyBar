@@ -27,6 +27,7 @@ export interface FluxHausDeviceStatus {
   detail: string | null;
   progressPercent: number | null;
   remainingSeconds: number | null;
+  elapsedSeconds?: number | null;
   batteryPercent: number | null;
   updatedAt: string | null;
 }
@@ -47,6 +48,7 @@ export interface FluxHausSnapshot {
 
 const DateStringSchema = z.string().datetime().nullable().optional();
 const FiniteNumberSchema = z.number().finite();
+const PercentSchema = FiniteNumberSchema.min(0).max(100);
 
 const MieleDeviceSchema = z
   .object({
@@ -66,7 +68,7 @@ const DishwasherSchema = z
     status: z.string().max(128).optional(),
     remainingTime: FiniteNumberSchema.nonnegative().optional(),
     remainingTimeUnit: z.enum(["seconds", "minutes", "hours"]).optional(),
-    programProgress: FiniteNumberSchema.optional(),
+    programProgress: PercentSchema.optional(),
     operationState: z.string().max(128).optional(),
     activeProgram: z.string().max(128).optional(),
     selectedProgram: z.string().max(128).optional(),
@@ -82,7 +84,7 @@ const RobotSchema = z
     docked: z.union([z.boolean(), z.string()]).optional(),
     charging: z.boolean().optional(),
     paused: z.boolean().optional(),
-    batteryLevel: FiniteNumberSchema.optional(),
+    batteryLevel: PercentSchema.optional(),
     timestamp: DateStringSchema,
     timeStarted: DateStringSchema,
   })
@@ -95,10 +97,10 @@ const AirPurifierSchema = z
     timestamp: DateStringSchema,
     online: z.boolean().optional(),
     fanOn: z.boolean().optional(),
-    fanSpeed: FiniteNumberSchema.optional().nullable(),
+    fanSpeed: PercentSchema.optional().nullable(),
     presetMode: z.string().max(128).optional().nullable(),
     pm25: FiniteNumberSchema.optional().nullable(),
-    filterLife: FiniteNumberSchema.optional().nullable(),
+    filterLife: PercentSchema.optional().nullable(),
   })
   .passthrough()
   .nullable()
@@ -106,15 +108,15 @@ const AirPurifierSchema = z
 
 const RangeSchema = z
   .object({
-    value: FiniteNumberSchema,
+    value: FiniteNumberSchema.nonnegative(),
   })
   .passthrough();
 
 const CarEvStatusSchema = z
   .object({
-    timestamp: z.string().datetime(),
+    timestamp: DateStringSchema,
     batteryCharge: z.boolean().optional(),
-    batteryStatus: FiniteNumberSchema,
+    batteryStatus: PercentSchema.optional(),
     drvDistance: z
       .array(
         z
@@ -164,9 +166,8 @@ const normalizeMiele = (
   const delayed = device.status === "Programmed" || device.status === "Waiting to start";
   const paused = device.status === "Pause";
   const finished = device.status === "End programmed";
-  const explicitlyRunning =
-    device.status === "Running" || device.status === "In use" || device.inUse === true;
   const remainingMinutes = device.timeRemaining ?? null;
+  const active = !delayed && !paused && !finished && (remainingMinutes ?? 0) > 0;
   const elapsedMinutes = device.timeRunning ?? null;
   const totalMinutes =
     remainingMinutes !== null && elapsedMinutes !== null
@@ -175,16 +176,16 @@ const normalizeMiele = (
   return {
     id,
     name,
-    active: !delayed && !paused && !finished && (explicitlyRunning || (remainingMinutes ?? 0) > 0),
+    active,
     lifecycle: finished
       ? "finished"
       : paused
         ? "paused"
         : delayed
           ? "inactive"
-          : explicitlyRunning || (remainingMinutes ?? 0) > 0
+          : active
             ? "active"
-            : device.status
+            : device.status === "Off" || device.status === "Not Connected"
               ? "inactive"
               : "unknown",
     status: normalizeText(device.status) ?? (device.inUse ? "In use" : "Off"),
@@ -194,6 +195,7 @@ const normalizeMiele = (
         ? clampPercent((elapsedMinutes / totalMinutes) * 100)
         : null,
     remainingSeconds: remainingMinutes === null ? null : Math.round(remainingMinutes * 60),
+    elapsedSeconds: null,
     batteryPercent: null,
     updatedAt: null,
   };
@@ -213,13 +215,16 @@ const normalizeDishwasher = (
   device: z.infer<typeof DishwasherSchema>,
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
+  const active = device.operationState === "Run" && (device.programProgress ?? 0) > 0;
   const lifecycle: FluxHausDeviceLifecycle =
-    device.operationState === "Run"
+    active
       ? "active"
       : device.operationState === "Pause"
         ? "paused"
         : device.operationState === "Finished"
           ? "finished"
+          : device.operationState === "Run"
+            ? "unknown"
           : device.operationState
             ? "inactive"
             : "unknown";
@@ -232,6 +237,7 @@ const normalizeDishwasher = (
     detail: normalizeText(device.activeProgram) ?? normalizeText(device.selectedProgram),
     progressPercent: clampPercent(device.programProgress),
     remainingSeconds: secondsFor(device.remainingTime, device.remainingTimeUnit),
+    elapsedSeconds: null,
     batteryPercent: null,
     updatedAt: null,
   };
@@ -241,6 +247,7 @@ const normalizeRobot = (
   id: "broombot" | "mopbot",
   name: string,
   device: z.infer<typeof RobotSchema>,
+  now: Date,
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
   const active = device.running === true || device.docking === true;
@@ -273,6 +280,10 @@ const normalizeRobot = (
     detail: null,
     progressPercent: null,
     remainingSeconds: null,
+    elapsedSeconds:
+      device.timeStarted == null
+        ? null
+        : Math.max(0, Math.round((now.getTime() - Date.parse(device.timeStarted)) / 1000)),
     batteryPercent: clampPercent(device.batteryLevel),
     updatedAt: device.timestamp ?? null,
   };
@@ -290,12 +301,13 @@ const normalizeAirPurifier = (
   return {
     id: "airPurifier",
     name: "Air purifier",
-    active: device.online === true && device.fanOn === true,
-    lifecycle: device.online === true && device.fanOn === true ? "active" : "inactive",
-    status: device.online === false ? "Offline" : device.fanOn ? "Running" : "Off",
+    active: device.fanOn === true,
+    lifecycle: device.fanOn === true ? "active" : "inactive",
+    status: device.fanOn ? "Running" : device.online === false ? "Offline" : "Off",
     detail: [preset, pm25].filter((value): value is string => value !== null).join(" ") || null,
     progressPercent: clampPercent(device.fanSpeed),
     remainingSeconds: null,
+    elapsedSeconds: null,
     batteryPercent: null,
     updatedAt: device.timestamp ?? null,
   };
@@ -304,7 +316,7 @@ const normalizeAirPurifier = (
 const normalizeCar = (
   car: z.infer<typeof CarEvStatusSchema>,
 ): FluxHausCarStatus | null => {
-  if (!car) return null;
+  if (!car?.timestamp || car.batteryStatus === undefined) return null;
   const range = car.drvDistance?.[0]?.rangeByFuel;
   return {
     batteryPercent: Math.max(0, Math.min(100, car.batteryStatus)),
@@ -321,8 +333,8 @@ export const parseFluxHausSnapshot = (input: unknown, now = new Date()): FluxHau
     normalizeMiele("washer", "Washer", response.washer),
     normalizeMiele("dryer", "Dryer", response.dryer),
     normalizeDishwasher(response.dishwasher),
-    normalizeRobot("broombot", "BroomBot", response.broombot),
-    normalizeRobot("mopbot", "MopBot", response.mopbot),
+    normalizeRobot("broombot", "BroomBot", response.broombot, now),
+    normalizeRobot("mopbot", "MopBot", response.mopbot, now),
     normalizeAirPurifier(response.airPurifier),
   ].filter((device): device is FluxHausDeviceStatus => device !== null);
   return {

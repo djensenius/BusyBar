@@ -91,6 +91,7 @@ describe("FluxHaus client", () => {
           detail: "Rinse",
           progressPercent: 36.666666666666664,
           remainingSeconds: 2_280,
+          elapsedSeconds: null,
           batteryPercent: null,
           updatedAt: null,
         },
@@ -103,6 +104,7 @@ describe("FluxHaus client", () => {
           detail: null,
           progressPercent: null,
           remainingSeconds: 0,
+          elapsedSeconds: null,
           batteryPercent: null,
           updatedAt: null,
         },
@@ -115,6 +117,7 @@ describe("FluxHaus client", () => {
           detail: "Eco50",
           progressPercent: 28,
           remainingSeconds: 4_320,
+          elapsedSeconds: null,
           batteryPercent: null,
           updatedAt: null,
         },
@@ -127,6 +130,7 @@ describe("FluxHaus client", () => {
           detail: null,
           progressPercent: null,
           remainingSeconds: null,
+          elapsedSeconds: null,
           batteryPercent: 84,
           updatedAt: "2026-09-12T16:59:55.000Z",
         },
@@ -139,6 +143,7 @@ describe("FluxHaus client", () => {
           detail: null,
           progressPercent: null,
           remainingSeconds: null,
+          elapsedSeconds: null,
           batteryPercent: 22,
           updatedAt: "2026-09-12T16:59:55.000Z",
         },
@@ -151,6 +156,7 @@ describe("FluxHaus client", () => {
           detail: "auto PM8",
           progressPercent: 42,
           remainingSeconds: null,
+          elapsedSeconds: null,
           batteryPercent: null,
           updatedAt: "2026-09-12T16:59:00.000Z",
         },
@@ -198,10 +204,66 @@ describe("FluxHaus client", () => {
     });
 
     expect(snapshot.devices).toMatchObject([
-      { id: "washer", active: true, lifecycle: "active" },
-      { id: "dishwasher", active: true, lifecycle: "active" },
+      { id: "washer", active: false, lifecycle: "unknown" },
+      { id: "dishwasher", active: false, lifecycle: "unknown" },
       { id: "broombot", active: false, lifecycle: "paused", status: "Paused" },
     ]);
+  });
+
+  it("omits incomplete car data without discarding equipment", () => {
+    expect(
+      parseFluxHausSnapshot({
+        timestamp: "2026-09-12T17:00:00.000Z",
+        washer: payload.washer,
+        carEvStatus: { batteryCharge: true },
+      }),
+    ).toMatchObject({
+      devices: [{ id: "washer", active: true }],
+      car: null,
+    });
+  });
+
+  it("preserves robot elapsed time when battery is unavailable", () => {
+    expect(
+      parseFluxHausSnapshot(
+        {
+          timestamp: "2026-09-12T17:00:00.000Z",
+          broombot: {
+            running: true,
+            timeStarted: "2026-09-12T16:45:00.000Z",
+          },
+        },
+        new Date("2026-09-12T17:00:00.000Z"),
+      ).devices[0],
+    ).toMatchObject({
+      id: "broombot",
+      active: true,
+      elapsedSeconds: 900,
+      batteryPercent: null,
+    });
+  });
+
+  it("uses fan state when purifier online telemetry is absent", () => {
+    expect(
+      parseFluxHausSnapshot({
+        timestamp: "2026-09-12T17:00:00.000Z",
+        airPurifier: { fanOn: true, fanSpeed: 25 },
+      }).devices[0],
+    ).toMatchObject({
+      id: "airPurifier",
+      active: true,
+      lifecycle: "active",
+      status: "Running",
+    });
+  });
+
+  it("rejects out-of-range percentages", () => {
+    expect(() =>
+      parseFluxHausSnapshot({
+        timestamp: "2026-09-12T17:00:00.000Z",
+        broombot: { running: true, batteryLevel: 101 },
+      }),
+    ).toThrow();
   });
 
   it("preserves a legitimate zero EV range", () => {
@@ -247,6 +309,20 @@ describe("FluxHaus client", () => {
     await expect(readFluxHausSnapshot(config)).rejects.toThrow(
       "FluxHaus API returned 401 for /",
     );
+  });
+
+  it("uses a bounded request timeout", async () => {
+    const timeoutSignal = new AbortController().signal;
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutSignal);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await readFluxHausSnapshot(config);
+
+    expect(timeout).toHaveBeenCalledWith(5_000);
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(timeoutSignal);
   });
 
   it("does not overlap polls", async () => {

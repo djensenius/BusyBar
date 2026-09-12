@@ -358,6 +358,41 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("alerts when an active device reaches an inactive terminal state", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    const inactive = fluxHausSnapshot({ washer: false });
+    inactive.devices[0] = {
+      ...inactive.devices[0]!,
+      lifecycle: "inactive",
+      status: "Off",
+    };
+    monitor.updateFluxHaus(inactive);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("DONE");
+    await monitor.stop();
+  });
+
   it("queues distinct completion cycles from the same device", async () => {
     const client = createClient();
     const monitor = new Monitor(
