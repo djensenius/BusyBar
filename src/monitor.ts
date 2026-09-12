@@ -236,7 +236,7 @@ export class Monitor {
     }, 5_000);
     this.#freshnessTimer.unref();
     this.#rotationTimer = setInterval(() => {
-      if (this.#state.status?.state !== "idle") return;
+      if (this.#state.status?.state !== "idle" || this.#state.completionAlert) return;
       const frames = availableFrontFrames(this.#state, this.#config, Date.now());
       const next = nextFrontFrame(this.#state.frontFrame, frames, this.#frontFrameIndex);
       this.#frontFrameIndex = next.index;

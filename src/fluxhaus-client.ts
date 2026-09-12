@@ -182,7 +182,7 @@ const normalizeMiele = (
       : paused
         ? "paused"
         : delayed
-          ? "inactive"
+          ? "unknown"
           : active
             ? "active"
             : device.status === "Off" || device.status === "Not Connected"
@@ -261,7 +261,9 @@ const normalizeRobot = (
       ? "paused"
       : docked
         ? "finished"
-        : "inactive";
+        : device.running === false
+          ? "inactive"
+          : "unknown";
   const status = device.running
     ? "Cleaning"
     : device.docking
@@ -270,7 +272,11 @@ const normalizeRobot = (
         ? "Paused"
         : device.charging
           ? "Charging"
-          : "Docked";
+          : docked
+            ? "Docked"
+            : device.running === false
+              ? "Stopped"
+              : "Unknown";
   return {
     id,
     name,

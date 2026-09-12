@@ -358,6 +358,43 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("does not treat delayed or unknown device telemetry as completed", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    const delayed = fluxHausSnapshot({ washer: false });
+    delayed.devices[0] = {
+      ...delayed.devices[0]!,
+      lifecycle: "unknown",
+      status: "Waiting to start",
+    };
+    monitor.updateFluxHaus(delayed);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "DONE",
+    );
+    await monitor.stop();
+  });
+
   it("alerts when an active device reaches an inactive terminal state", async () => {
     const client = createClient();
     const monitor = new Monitor(
@@ -433,6 +470,43 @@ describe("monitor lifecycle", () => {
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
       "DONE",
     );
+    await monitor.stop();
+  });
+
+  it("pauses carousel rotation while a completion is displayed", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        frontRotationMs: 1_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summary());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("DONE");
+
+    await vi.advanceTimersByTimeAsync(10_250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP",
+      "DAY",
+      "12",
+    ]);
     await monitor.stop();
   });
 

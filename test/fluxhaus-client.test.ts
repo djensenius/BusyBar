@@ -210,6 +210,26 @@ describe("FluxHaus client", () => {
     ]);
   });
 
+  it("keeps delayed appliances and incomplete robots non-terminal", () => {
+    const snapshot = parseFluxHausSnapshot({
+      timestamp: "2026-09-12T17:00:00.000Z",
+      washer: {
+        status: "Waiting to start",
+        inUse: true,
+        timeRemaining: 30,
+      },
+      broombot: {
+        docking: false,
+        batteryLevel: 50,
+      },
+    });
+
+    expect(snapshot.devices).toMatchObject([
+      { id: "washer", active: false, lifecycle: "unknown" },
+      { id: "broombot", active: false, lifecycle: "unknown", status: "Unknown" },
+    ]);
+  });
+
   it("omits incomplete car data without discarding equipment", () => {
     expect(
       parseFluxHausSnapshot({
