@@ -30,7 +30,6 @@ const SMART_HOME_POLL_INTERVAL_MS = 30_000;
 const SMART_HOME_BACK_DISPLAY_MS = 4_000;
 const COMPLETION_ALERT_MS = 10_000;
 const COMPLETION_EXPIRY_MS = 5 * 60_000;
-const COMPLETION_QUEUE_LIMIT = 10;
 const COMPLETION_DEVICE_ORDER: readonly FluxHausDeviceId[] = [
   "washer",
   "dryer",
@@ -446,13 +445,6 @@ export class Monitor {
     this.#state = nextState;
     for (const alert of completed) {
       this.#completionQueue.push(alert);
-      if (this.#completionQueue.length > COMPLETION_QUEUE_LIMIT) {
-        const dropped = this.#completionQueue.shift();
-        log.warn(
-          { device: dropped?.id, queueLimit: COMPLETION_QUEUE_LIMIT },
-          "BUSY Bar completion alert queue limit reached; dropped oldest alert",
-        );
-      }
     }
     this.#showNextCompletion();
     this.#scheduleRender();

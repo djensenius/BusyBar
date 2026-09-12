@@ -473,6 +473,44 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("retains more than ten unexpired completion events", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        statusStaleAfterMs: 10 * 60_000,
+        systemStaleAfterMs: 10 * 60_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("recording"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    for (let cycle = 0; cycle < 11; cycle += 1) {
+      monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+      monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    }
+
+    monitor.updateStatus({ ...status("idle"), id: 2 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).toHaveBeenCalledTimes(1);
+    for (let cycle = 1; cycle < 11; cycle += 1) {
+      await vi.advanceTimersByTimeAsync(10_250);
+      expect(client.playStockSound).toHaveBeenCalledTimes(cycle + 1);
+    }
+    await monitor.stop();
+  });
+
   it("pauses carousel rotation while a completion is displayed", async () => {
     const client = createClient();
     const monitor = new Monitor(
