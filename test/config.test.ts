@@ -130,6 +130,25 @@ describe("monitor configuration", () => {
     });
   });
 
+  it("validates FluxHaus URL and timing bounds", () => {
+    const fluxHausBase = {
+      ...base,
+      BUSY_BAR_FLUXHAUS_ENABLED: "true",
+      BUSY_BAR_FLUXHAUS_URL: "https://haus.example.com",
+      BUSY_BAR_FLUXHAUS_PASSWORD: "read-only-password",
+    };
+    for (const [name, value] of [
+      ["BUSY_BAR_FLUXHAUS_URL", "ftp://haus.example.com"],
+      ["BUSY_BAR_FLUXHAUS_URL", "not a URL"],
+      ["BUSY_BAR_FLUXHAUS_POLL_SECONDS", "4"],
+      ["BUSY_BAR_FLUXHAUS_POLL_SECONDS", "3601"],
+      ["BUSY_BAR_FLUXHAUS_STALE_AFTER_SECONDS", "9"],
+      ["BUSY_BAR_FLUXHAUS_STALE_AFTER_SECONDS", "86401"],
+    ] as const) {
+      expect(() => resolveConfig({ ...fluxHausBase, [name]: value })).toThrow(name);
+    }
+  });
+
   it("configures password-protected local input", () => {
     expect(
       resolveConfig({
