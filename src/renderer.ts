@@ -10,10 +10,16 @@ import type { SceneStatus } from "./home-assistant-client.js";
 import {
   boothArtElements,
   degreeElement,
+  fluxHausIconElements,
   frontRectangle,
   warningArtElements,
   weatherIconElements,
 } from "./front-art.js";
+import type {
+  FluxHausDeviceId,
+  FluxHausDeviceStatus,
+  FluxHausSnapshot,
+} from "./fluxhaus-client.js";
 import type {
   BoothFanStats,
   BoothState,
@@ -41,6 +47,13 @@ export type FrontFrame =
   | "piCpuTemperature"
   | "routerBatteryCharge"
   | "routerBatteryTemperature"
+  | "carBattery"
+  | "fluxhausWasher"
+  | "fluxhausDryer"
+  | "fluxhausDishwasher"
+  | "fluxhausBroombot"
+  | "fluxhausMopbot"
+  | "fluxhausAirPurifier"
   | "clock"
   | "weather";
 export type IdleMode = "weather" | "clock" | "weatherClock" | "telephone" | "all";
@@ -48,6 +61,12 @@ export type BackPage = 0 | 1 | 2 | 3;
 export interface SceneAnnouncement {
   label: string;
   phase: 0 | 1 | 2;
+}
+
+export interface CompletionAlert {
+  id: FluxHausDeviceId;
+  label: string;
+  occurredAtMs: number;
 }
 
 export interface SmartHomeAction {
@@ -65,6 +84,9 @@ export interface MonitorState {
   summary: MonitorSummary | null;
   weather: WeatherSnapshot | null;
   weatherReceivedAtMs: number | null;
+  fluxHaus: FluxHausSnapshot | null;
+  fluxHausReceivedAtMs: number | null;
+  completionAlert: CompletionAlert | null;
   frontFrame: FrontFrame;
   idleMode: IdleMode;
   idleModeAnnouncement: IdleMode | null;
@@ -81,6 +103,7 @@ export interface MonitorRender {
   backSignature: string;
   signature: string;
   alertKind: "error" | "offline" | "critical" | null;
+  renderedCompletionAlert: CompletionAlert | null;
 }
 
 export const DEFAULT_FRONT_FRAME: SummaryFrontFrame = "interactionsToday";
@@ -117,6 +140,8 @@ const COLORS = {
   slate: "#34445CFF",
   slateDark: "#101827FF",
   yellow: "#FFD057FF",
+  green: "#30D158FF",
+  greenDark: "#14532DFF",
   ice: "#D9EFFFFF",
   black: "#041616FF",
   trueBlack: "#000000FF",
@@ -437,6 +462,26 @@ export const availableFrontFrames = (
       ]
     : [...BASE_TELEPHONE_FRAMES];
   const telephoneFrames = [...summaryFrames, ...vitalFrames];
+  const fluxHausFresh =
+    state.fluxHaus !== null &&
+    config.fluxHaus !== null &&
+    ageMs(state.fluxHausReceivedAtMs, nowMs) <= config.fluxHaus.staleAfterMs;
+  const carFrames: FrontFrame[] =
+    fluxHausFresh && state.fluxHaus?.car ? ["carBattery"] : [];
+  const fluxHausFrameById: Record<FluxHausDeviceId, FrontFrame> = {
+    washer: "fluxhausWasher",
+    dryer: "fluxhausDryer",
+    dishwasher: "fluxhausDishwasher",
+    broombot: "fluxhausBroombot",
+    mopbot: "fluxhausMopbot",
+    airPurifier: "fluxhausAirPurifier",
+  };
+  const activeFluxHausFrames: FrontFrame[] = fluxHausFresh
+    ? (state.fluxHaus?.devices ?? [])
+        .filter((device) => device.active)
+        .map((device) => fluxHausFrameById[device.id])
+    : [];
+  const normalTelephoneFrames = [...telephoneFrames, ...carFrames];
   const weatherAvailable = Boolean(
     config.weather &&
       state.weather &&
@@ -457,13 +502,18 @@ export const availableFrontFrames = (
               ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
             ]
           : state.idleMode === "telephone"
-            ? telephoneFrames
-            : [
-                ...telephoneFrames,
-                ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
-                ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
-              ];
-  return selectedFrames.length > 0 ? selectedFrames : telephoneFrames;
+                ? normalTelephoneFrames
+                : (() => {
+                    const normalFrames: FrontFrame[] = [
+                      ...normalTelephoneFrames,
+                      ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
+                      ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
+                    ];
+                    return activeFluxHausFrames.length === 0
+                      ? normalFrames
+                      : normalFrames.flatMap((frame) => [frame, ...activeFluxHausFrames]);
+                  })();
+  return selectedFrames.length > 0 ? selectedFrames : normalTelephoneFrames;
 };
 
 const healthPresentation = (
@@ -1304,6 +1354,224 @@ const vitalPresentation = (
   }
 };
 
+const compactDuration = (seconds: number | null): string | null => {
+  if (seconds === null) return null;
+  const minutes = Math.max(0, Math.ceil(seconds / 60));
+  if (minutes < 60) return `${minutes}M`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours > 99) return "99H+";
+  return remainder === 0 ? `${hours}H` : `${hours}H${remainder}`;
+};
+
+const compactAge = (timestamp: string, nowMs: number): string => {
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) return "--";
+  const minutes = Math.max(0, Math.floor((nowMs - parsed) / 60_000));
+  if (minutes < 1) return "<1M";
+  if (minutes < 60) return `${minutes}M`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}H`;
+  const days = Math.floor(hours / 24);
+  return days > 99 ? "99D+" : `${days}D`;
+};
+
+const fluxHausDeviceForFrame = (
+  frame: FrontFrame,
+  snapshot: FluxHausSnapshot | null,
+): FluxHausDeviceStatus | null => {
+  const idByFrame: Partial<Record<FrontFrame, FluxHausDeviceId>> = {
+    fluxhausWasher: "washer",
+    fluxhausDryer: "dryer",
+    fluxhausDishwasher: "dishwasher",
+    fluxhausBroombot: "broombot",
+    fluxhausMopbot: "mopbot",
+    fluxhausAirPurifier: "airPurifier",
+  };
+  const id = idByFrame[frame];
+  return id ? (snapshot?.devices.find((device) => device.id === id) ?? null) : null;
+};
+
+export const fluxHausPalette = (
+  id: FluxHausDeviceId | "car" | "complete",
+): { background: Gradient; accent: string; icon: string } => {
+  switch (id) {
+    case "washer":
+      return {
+        background: [COLORS.blueDark, COLORS.cyanDark],
+        accent: "#173E4AFF",
+        icon: "#72DCFFFF",
+      };
+    case "dryer":
+      return {
+        background: ["#78350FFF", "#C65D08FF"],
+        accent: "#4D2A0AFF",
+        icon: "#FF9F32FF",
+      };
+    case "dishwasher":
+      return {
+        background: [COLORS.blueDark, "#245F79FF"],
+        accent: "#173446FF",
+        icon: "#7DD3FCFF",
+      };
+    case "broombot":
+      return {
+        background: [COLORS.greenDark, "#23894AFF"],
+        accent: "#173B25FF",
+        icon: "#73E895FF",
+      };
+    case "mopbot":
+      return {
+        background: ["#075985FF", "#0F766EFF"],
+        accent: "#123D3AFF",
+        icon: "#5EEAD4FF",
+      };
+    case "airPurifier":
+      return {
+        background: [COLORS.slateDark, COLORS.slate],
+        accent: "#273449FF",
+        icon: "#94A3B8FF",
+      };
+    case "car":
+      return {
+        background: ["#3F3F46FF", "#71717AFF"],
+        accent: "#453D16FF",
+        icon: "#FACC15FF",
+      };
+    case "complete":
+      return {
+        background: [COLORS.greenDark, COLORS.green],
+        accent: "#173B25FF",
+        icon: "#86EFACFF",
+      };
+  }
+};
+
+const fluxHausCard = (
+  icon: Parameters<typeof fluxHausIconElements>[1],
+  title: string,
+  detail: string,
+  value: string,
+  palette: ReturnType<typeof fluxHausPalette>,
+  dark: boolean,
+  indicator?: string,
+): FrontPresentation => ({
+  elements: [
+    frontBackground(dark ? [COLORS.trueBlack, COLORS.trueBlack] : palette.background),
+    ...fluxHausIconElements("front-fluxhaus", icon, palette.icon),
+    frontRectangle(
+      "front-fluxhaus-badge",
+      54,
+      1,
+      17,
+      14,
+      dark ? palette.accent : "#05070CCC",
+    ),
+    frontText(
+      "front-fluxhaus-title",
+      title,
+      21,
+      1,
+      title.length > 6 ? "tiny" : "small",
+      dark ? palette.icon : COLORS.white,
+      "top_left",
+      31,
+    ),
+    frontText(
+      "front-fluxhaus-detail",
+      detail,
+      21,
+      10,
+      "tiny",
+      dark ? palette.icon : COLORS.white,
+      "top_left",
+      31,
+    ),
+    frontText(
+      "front-fluxhaus-value",
+      value,
+      62,
+      8,
+      value.length > 3 ? "tiny" : "small",
+      palette.icon,
+      "center",
+      15,
+    ),
+  ],
+  ...(indicator ? { indicator } : {}),
+});
+
+const fluxHausPresentation = (
+  frame: FrontFrame,
+  snapshot: FluxHausSnapshot | null,
+  nowMs: number,
+  dark: boolean,
+): FrontPresentation => {
+  if (frame === "carBattery") {
+    const car = snapshot?.car;
+    const range = car?.evRangeKm ?? car?.totalRangeKm;
+    const detail = car
+      ? `${range == null ? "--" : Math.round(range)}KM ${compactAge(car.updatedAt, nowMs)}`
+      : "--";
+    return fluxHausCard(
+      "car",
+      "CAR",
+      detail,
+      car ? `${Math.round(car.batteryPercent)}%` : "--",
+      fluxHausPalette("car"),
+      dark,
+      car?.charging ? COLORS.yellow : undefined,
+    );
+  }
+
+  const device = fluxHausDeviceForFrame(frame, snapshot);
+  if (!device) {
+    return fluxHausCard("complete", "FLUX", "UNAVAILABLE", "--", fluxHausPalette("complete"), dark);
+  }
+  const titleById: Record<FluxHausDeviceId, string> = {
+    washer: "WASHER",
+    dryer: "DRYER",
+    dishwasher: "DISH",
+    broombot: "BROOM",
+    mopbot: "MOP",
+    airPurifier: "AIR",
+  };
+  const value =
+    compactDuration(device.remainingSeconds) ??
+    compactDuration(device.elapsedSeconds ?? null) ??
+    (device.batteryPercent === null
+      ? device.progressPercent === null
+        ? "ON"
+        : `${Math.round(device.progressPercent)}%`
+      : `${Math.round(device.batteryPercent)}%`);
+  const detail =
+    device.id === "airPurifier" && device.progressPercent !== null
+      ? `${device.detail ?? device.status} ${Math.round(device.progressPercent)}%`
+      : (device.detail ?? device.status);
+  return fluxHausCard(
+    device.id,
+    titleById[device.id],
+    detail.toUpperCase(),
+    value,
+    fluxHausPalette(device.id),
+    dark,
+  );
+};
+
+const completionPresentation = (
+  alert: CompletionAlert,
+  dark: boolean,
+): FrontPresentation =>
+  fluxHausCard(
+    "complete",
+    alert.label.toUpperCase(),
+    "CYCLE",
+    "DONE",
+    fluxHausPalette("complete"),
+    dark,
+    COLORS.green,
+  );
+
 const clockPresentation = (
   timeZone: string,
   nowMs: number,
@@ -1340,22 +1608,12 @@ const clockPresentation = (
           ? [COLORS.trueBlack, COLORS.trueBlack]
           : [COLORS.blueDark, COLORS.cyanDark],
       ),
-      frontRectangle(
-        "front-clock-badge",
-        44,
-        0,
-        28,
-        16,
-        dark ? COLORS.trueBlack : COLORS.cyan,
-      ),
-      frontRectangle(
-        "front-clock-divider",
-        44,
-        0,
-        1,
-        16,
-        dark ? COLORS.cyanDark : COLORS.blueDark,
-      ),
+      ...(dark
+        ? []
+        : [
+            frontRectangle("front-clock-badge", 44, 0, 28, 16, COLORS.cyan),
+            frontRectangle("front-clock-divider", 44, 0, 1, 16, COLORS.blueDark),
+          ]),
       frontText(
         "front-clock-time",
         time,
@@ -1649,6 +1907,17 @@ const idlePresentation = (
       : summaryPresentation(DEFAULT_FRONT_FRAME, state.summary, dark);
   }
   if (
+    frame === "carBattery" ||
+    frame === "fluxhausWasher" ||
+    frame === "fluxhausDryer" ||
+    frame === "fluxhausDishwasher" ||
+    frame === "fluxhausBroombot" ||
+    frame === "fluxhausMopbot" ||
+    frame === "fluxhausAirPurifier"
+  ) {
+    return fluxHausPresentation(frame, state.fluxHaus, nowMs, dark);
+  }
+  if (
     frame === "fanCooling" ||
     frame === "piCpuTemperature" ||
     frame === "routerBatteryCharge" ||
@@ -1667,11 +1936,19 @@ export const renderMonitor = (
   const offline = statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs);
   const boothState = state.status?.state;
   const health = healthPresentation(state, nowMs, config.systemStaleAfterMs);
+  const renderedCompletionAlert =
+    !offline && boothState === "idle" && !health.view ? state.completionAlert : null;
   const frontView: FrontPresentation = offline
     ? warningPresentation("OFFLINE", [COLORS.redDark, COLORS.red], COLORS.red, COLORS.red)
     : boothState && boothState !== "idle"
       ? statePresentation(boothState)
-      : (health.view ?? idlePresentation(state, config, nowMs));
+      : (health.view ??
+        (state.completionAlert
+          ? completionPresentation(
+              state.completionAlert,
+              state.weather?.sunState === "below_horizon",
+            )
+          : idlePresentation(state, config, nowMs)));
   const frontElements = stableFrontElements(frontView.elements);
   const backView: BackPresentation =
     state.backPage === 1
@@ -1707,6 +1984,7 @@ export const renderMonitor = (
     frontSignature,
     backSignature,
     signature: JSON.stringify(payload),
+    renderedCompletionAlert,
     alertKind:
       offline || health.offline
         ? "offline"

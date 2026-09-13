@@ -182,6 +182,10 @@ h2 {
   gap: 18px;
 }
 
+.review-section {
+  padding-top: 88px;
+}
+
 .frame {
   display: grid;
   align-content: start;

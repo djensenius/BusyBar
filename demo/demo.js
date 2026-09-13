@@ -17,6 +17,8 @@ const COLORS = {
   slateDark: "#101827",
   yellow: "#ffd057",
   ice: "#d9efff",
+  green: "#30d158",
+  greenDark: "#12612c",
   black: "#041616",
   white: "#ffffff",
 };
@@ -197,6 +199,126 @@ const weatherSamples = [
   ...weatherStyle(sample.condition),
 }));
 
+const fluxHausDesigns = [
+  {
+    icon: "washer",
+    title: "WASHER",
+    detail: "RINSE",
+    value: "38M",
+  },
+  {
+    icon: "washer",
+    title: "WASHER",
+    detail: "62% DONE",
+    value: "18M",
+    dark: true,
+  },
+  {
+    icon: "dryer",
+    title: "DRYER",
+    detail: "COTTON",
+    value: "44M",
+  },
+  {
+    icon: "dryer",
+    title: "DRYER",
+    detail: "COOL",
+    value: "9M",
+    dark: true,
+  },
+  {
+    icon: "dishwasher",
+    title: "DISH",
+    detail: "ECO 50",
+    value: "1H12",
+  },
+  {
+    icon: "dishwasher",
+    title: "DISH",
+    detail: "WASHING",
+    value: "28%",
+    dark: true,
+  },
+  {
+    icon: "broombot",
+    title: "BROOM",
+    detail: "CLEAN",
+    value: "84%",
+  },
+  {
+    icon: "broombot",
+    title: "BROOM",
+    detail: "TO DOCK",
+    value: "31%",
+    dark: true,
+  },
+  {
+    icon: "mopbot",
+    title: "MOP",
+    detail: "MOPPING",
+    value: "73%",
+  },
+  {
+    icon: "mopbot",
+    title: "MOP",
+    detail: "TO DOCK",
+    value: "22%",
+    dark: true,
+  },
+  {
+    icon: "airPurifier",
+    title: "AIR",
+    detail: "AUTO PM8",
+    value: "42%",
+  },
+  {
+    icon: "airPurifier",
+    title: "AIR",
+    detail: "NIGHT PM4",
+    value: "18%",
+    dark: true,
+  },
+  {
+    icon: "car",
+    title: "CAR",
+    detail: "356KM",
+    value: "78%",
+  },
+  {
+    icon: "car",
+    title: "CAR",
+    detail: "78% 356KM",
+    value: "12M",
+    dark: true,
+  },
+  {
+    icon: "complete",
+    title: "WASHER",
+    detail: "CYCLE",
+    value: "DONE",
+  },
+  {
+    icon: "complete",
+    title: "DISH",
+    detail: "CYCLE",
+    value: "DONE",
+    dark: true,
+  },
+].map((design, index) => {
+  const palette = globalThis.FLUX_HAUS_ART.palettes[design.icon];
+  return {
+    kind: "fluxhaus",
+    review: true,
+    name: `FluxHaus - ${design.title.toLowerCase()} ${design.dark ? "night" : "day"}`,
+    ...design,
+    start: palette.background[0],
+    end: palette.background[1],
+    accent: palette.accent,
+    iconAccent: palette.icon,
+    concept: Math.floor(index / 2) + 1,
+  };
+});
+
 const designs = [
   {
     kind: "booth",
@@ -376,6 +498,15 @@ const designs = [
     accent: COLORS.cyan,
     accentText: COLORS.black,
   },
+  {
+    kind: "clock",
+    name: "Clock - night mode",
+    dark: true,
+    start: COLORS.black,
+    end: COLORS.black,
+    accent: COLORS.black,
+    accentText: COLORS.cyan,
+  },
   ...weatherSamples,
   {
     kind: "booth",
@@ -408,9 +539,11 @@ const designs = [
     end: COLORS.red,
     accent: COLORS.red,
   },
+  ...fluxHausDesigns,
 ];
 
 const frames = document.querySelector("#frames");
+const fluxHausFrames = document.querySelector("#fluxhaus-frames");
 
 const gradient = (context, start, end) => {
   const fill = context.createLinearGradient(0, 0, 72, 0);
@@ -575,12 +708,14 @@ const drawClock = (context, design) => {
 
   context.fillStyle = gradient(context, design.start, design.end);
   context.fillRect(0, 0, 72, 16);
-  context.fillStyle = design.accent;
-  context.fillRect(44, 0, 28, 16);
-  context.fillStyle = COLORS.blueDark;
-  context.fillRect(44, 0, 1, 16);
+  if (!design.dark) {
+    context.fillStyle = design.accent;
+    context.fillRect(44, 0, 28, 16);
+    context.fillStyle = COLORS.blueDark;
+    context.fillRect(44, 0, 1, 16);
+  }
 
-  context.fillStyle = COLORS.white;
+  context.fillStyle = design.dark ? COLORS.ice : COLORS.white;
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.font = "bold 11px monospace";
@@ -848,6 +983,40 @@ const drawProblem = (context, design, blink) => {
   context.fillText(design.label, 44, 8);
 };
 
+const drawFluxHausIcon = (context, icon) => {
+  for (const rectangle of globalThis.FLUX_HAUS_ART.icons[icon]) {
+    context.fillStyle = rectangle.color;
+    context.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+  }
+};
+
+const drawFluxHaus = (context, design) => {
+  context.fillStyle = design.dark
+    ? COLORS.black
+    : gradient(context, design.start, design.end);
+  context.fillRect(0, 0, 72, 16);
+  drawFluxHausIcon(context, design.icon);
+
+  context.fillStyle = design.dark ? design.accent : "#05070ccc";
+  context.fillRect(54, 1, 17, 14);
+  context.fillStyle = design.iconAccent;
+  context.fillRect(54, 14, 17, 1);
+
+  context.fillStyle = design.dark ? design.iconAccent : COLORS.white;
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.font = `bold ${design.title.length > 6 ? 5 : 7}px monospace`;
+  context.fillText(design.title, 21, 1);
+  context.font = "bold 4px monospace";
+  context.fillText(design.detail, 21, 10);
+
+  context.fillStyle = design.iconAccent;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = `bold ${design.value.length > 3 ? 5 : 7}px monospace`;
+  context.fillText(design.value, 62.5, 7.5);
+};
+
 const render = (canvas, design, blink) => {
   const context = canvas.getContext("2d");
   context.setTransform(1, 0, 0, 1, 0, 0);
@@ -869,6 +1038,10 @@ const render = (canvas, design, blink) => {
   }
   if (design.kind === "problem") {
     drawProblem(context, design, blink);
+    return;
+  }
+  if (design.kind === "fluxhaus") {
+    drawFluxHaus(context, design);
     return;
   }
 
@@ -901,7 +1074,7 @@ const canvases = designs.map((design) => {
 
   shell.append(canvas);
   frame.append(label, shell);
-  frames.append(frame);
+  (design.review ? fluxHausFrames : frames).append(frame);
   return { canvas, design };
 });
 

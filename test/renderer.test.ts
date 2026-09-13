@@ -1,6 +1,7 @@
 import type { DisplayDrawParams, RectangleElement, TextElement } from "@busy-app/busy-lib";
 import { describe, expect, it } from "vite-plus/test";
 import type { MonitorConfig } from "../src/config.js";
+import type { FluxHausSnapshot } from "../src/fluxhaus-client.js";
 import type { MonitorState } from "../src/renderer.js";
 import { availableFrontFrames, renderMonitor } from "../src/renderer.js";
 import type {
@@ -36,6 +37,7 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   startToggleLightIds: [],
   dialSceneId: null,
   weather: null,
+  fluxHaus: null,
   audioEnabled: false,
   alertSound: null,
   alertCooldownMs: 300_000,
@@ -207,6 +209,54 @@ const weather: WeatherSnapshot = {
   observedAt: new Date(now - 1_000).toISOString(),
 };
 
+const fluxHaus: FluxHausSnapshot = {
+  generatedAt: new Date(now - 1_000).toISOString(),
+  devices: [
+    {
+      id: "washer",
+      name: "Washer",
+      active: true,
+      lifecycle: "active",
+      status: "Running",
+      detail: "Rinse",
+      progressPercent: 62,
+      remainingSeconds: 38 * 60,
+      batteryPercent: null,
+      updatedAt: null,
+    },
+    {
+      id: "dryer",
+      name: "Dryer",
+      active: true,
+      lifecycle: "active",
+      status: "Running",
+      detail: "Cottons",
+      progressPercent: 40,
+      remainingSeconds: 44 * 60,
+      batteryPercent: null,
+      updatedAt: null,
+    },
+  ],
+  car: {
+    batteryPercent: 78,
+    evRangeKm: 356,
+    totalRangeKm: 356,
+    charging: true,
+    updatedAt: new Date(now - 12 * 60_000).toISOString(),
+  },
+};
+
+const fluxHausEnabledConfig: Extract<MonitorConfig, { enabled: true }> = {
+  ...config,
+  fluxHaus: {
+    url: "https://haus.example.com",
+    username: "demo",
+    password: "secret",
+    pollIntervalMs: 10_000,
+    staleAfterMs: 120_000,
+  },
+};
+
 const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   status: status("idle"),
   statusReceivedAtMs: now - 1_000,
@@ -217,6 +267,9 @@ const model = (overrides: Partial<MonitorState> = {}): MonitorState => ({
   summary: null,
   weather: null,
   weatherReceivedAtMs: null,
+  fluxHaus: null,
+  fluxHausReceivedAtMs: null,
+  completionAlert: null,
   frontFrame: "interactionsToday",
   idleMode: "all",
   idleModeAnnouncement: null,
@@ -463,6 +516,190 @@ describe("monitor renderer", () => {
     expect(
       textsFor(renderMonitor(model({ frontFrame: "clock" }), config, now).payload, "front"),
     ).toEqual(["16:00", "FRI", "JUL 31"]);
+  });
+
+  it("renders FluxHaus equipment and car cards", () => {
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausWasher",
+            fluxHaus,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["WASHER", "RINSE", "38M"]);
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "carBattery",
+            fluxHaus,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["CAR", "356KM 12M", "78%"]);
+  });
+
+  it("renders robot elapsed time when battery is unavailable", () => {
+    const robotSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "broombot",
+          name: "BroomBot",
+          active: true,
+          lifecycle: "active",
+          status: "Cleaning",
+          detail: null,
+          progressPercent: null,
+          remainingSeconds: null,
+          elapsedSeconds: 15 * 60,
+          batteryPercent: null,
+          updatedAt: new Date(now - 15 * 60_000).toISOString(),
+        },
+      ],
+    };
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausBroombot",
+            fluxHaus: robotSnapshot,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["BROOM", "CLEANING", "15M"]);
+  });
+
+  it("bounds long FluxHaus labels and values to their card regions", () => {
+    const longLabels: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          ...fluxHaus.devices[0]!,
+          detail: "Automatic delicate programme",
+          remainingSeconds: 1000 * 60 * 60,
+        },
+      ],
+    };
+    const payload = renderMonitor(
+      model({
+        frontFrame: "fluxhausWasher",
+        fluxHaus: longLabels,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    ).payload;
+    const visibleTexts = frontTextElements(payload).filter((element) => element.text);
+
+    expect(visibleTexts.map((element) => element.text)).toEqual([
+      "WASHER",
+      "AUTOMATIC DELICATE",
+      "99H+",
+    ]);
+    expect(visibleTexts.map((element) => element.width)).toEqual([31, 31, 15]);
+  });
+
+  it("repeats the active FluxHaus group after every normal frame in all mode", () => {
+    const frames = availableFrontFrames(
+      model({
+        summary,
+        system: null,
+        systemReceivedAtMs: null,
+        fluxHaus,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    );
+
+    expect(frames.slice(0, 6)).toEqual([
+      "interactionsToday",
+      "fluxhausWasher",
+      "fluxhausDryer",
+      "messagesToday",
+      "fluxhausWasher",
+      "fluxhausDryer",
+    ]);
+    expect(frames).toContain("carBattery");
+    expect(
+      availableFrontFrames(
+        model({
+          idleMode: "telephone",
+          summary,
+          system: null,
+          systemReceivedAtMs: null,
+          fluxHaus,
+          fluxHausReceivedAtMs: now - 1_000,
+        }),
+        fluxHausEnabledConfig,
+        now,
+      ),
+    ).toEqual([
+      "interactionsToday",
+      "messagesToday",
+      "interactionsTotal",
+      "messagesTotal",
+      "carBattery",
+    ]);
+  });
+
+  it("hides stale FluxHaus frames and renders completion alerts", () => {
+    expect(
+      availableFrontFrames(
+        model({
+          summary,
+          fluxHaus,
+          fluxHausReceivedAtMs: now - fluxHausEnabledConfig.fluxHaus!.staleAfterMs - 1,
+        }),
+        fluxHausEnabledConfig,
+        now,
+      ),
+    ).not.toContain("carBattery");
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            completionAlert: { id: "washer", label: "Washer", occurredAtMs: now },
+            weather: { ...weather, sunState: "below_horizon" },
+          }),
+          weatherEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["WASHER", "CYCLE", "DONE"]);
+  });
+
+  it("does not draw the clock divider in night mode", () => {
+    const payload = renderMonitor(
+      model({
+        frontFrame: "clock",
+        weather: { ...weather, sunState: "below_horizon" },
+        weatherReceivedAtMs: now - 1_000,
+      }),
+      weatherEnabledConfig,
+      now,
+    ).payload;
+
+    expect(frontFillColors(payload).slice(0, 2)).toEqual(["#000000FF", "#000000FF"]);
+    expect(frontFillColors(payload)).not.toContain("#006A85FF");
   });
 
   it("filters carousel frames by the selected idle mode", () => {

@@ -7,6 +7,9 @@ installation. It reads the authenticated
 API and renders booth state, today/overall counters, booth hardware vitals, time,
 optional weather, and system health through BUSY Cloud, with automatic LAN
 failover when the local device URL and access key are configured.
+It can also read the FluxHaus aggregate status API to interleave active
+appliances and equipment, show car battery/range freshness, and announce
+completed jobs.
 
 The service is deliberately independent of the Operator deployment. Run one
 instance on an always-on home server, Portainer host, or cloud container.
@@ -33,6 +36,11 @@ gradient cards:
 - Fresh booth telemetry adds a four-step fan cooling meter and the Pi CPU temperature
 - Fresh router component telemetry adds battery charge and battery temperature
   cards
+- Fresh FluxHaus data adds the car battery, EV range, and compact last-update
+  age to the normal carousel
+- While FluxHaus equipment is active, the complete active group is inserted
+  after every normal card in the full `all` mode. The group can include the
+  washer, dryer, dishwasher, BroomBot, MopBot, and air purifier
 - Any rendered `DAY` card with an explicit value of `0` is omitted
 - Unknown or missing pickup day totals still render as unavailable (`--`),
   while an absent `breakdownToday` block continues to hide the five breakout
@@ -55,6 +63,15 @@ degrees on the front; the rear keeps decimal precision.
 Weather uses condition-specific artwork for every Home Assistant weather state.
 Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
+FluxHaus cards use device-specific pixel art and update through the same
+debounced rendering path as the existing status sources.
+
+When a washer, dryer, dishwasher, BroomBot, or MopBot transitions from active
+to finished, the front shows a ten-second `DONE` card. Simultaneous completions
+are queued in device order. If BUSY Bar audio is enabled, each completion also
+plays the configured stock sound. Initial snapshots establish a baseline and
+never produce false completion alerts. The air purifier is displayed while its
+fan is on but does not generate a completion alert.
 
 ## Rear display
 
@@ -99,6 +116,12 @@ Create a stack from [`compose.yaml`](compose.yaml), then define:
 | `BUSY_BAR_HOME_ASSISTANT_URL`   | Home Assistant origin                      |
 | `BUSY_BAR_HOME_ASSISTANT_TOKEN` | Home Assistant long-lived access token    |
 | `BUSY_BAR_START_TOGGLE_LIGHT_IDS` | Optional comma-separated lights turned off by a second Start/Pause press |
+| `BUSY_BAR_FLUXHAUS_ENABLED`     | Set `true` to add FluxHaus status          |
+| `BUSY_BAR_FLUXHAUS_URL`         | FluxHaus server origin                     |
+| `BUSY_BAR_FLUXHAUS_USERNAME`    | Read-only Basic auth user (default `demo`) |
+| `BUSY_BAR_FLUXHAUS_PASSWORD`    | Read-only Basic auth password              |
+| `BUSY_BAR_FLUXHAUS_POLL_SECONDS` | Poll interval (default `10`)              |
+| `BUSY_BAR_FLUXHAUS_STALE_AFTER_SECONDS` | Card freshness window (default `120`) |
 
 Deploy exactly one replica. The container exposes no ports.
 
@@ -174,6 +197,8 @@ See [`.env.example`](.env.example) for every setting. Notable defaults:
   `BUSY_BAR_CLOCK_ENABLED=false`.
 - Weather refreshes every 10 minutes and disappears from the carousel after one
   hour without a successful Home Assistant response.
+- FluxHaus refreshes every 10 seconds by default and its equipment/car cards
+  disappear after two minutes without a successful response.
 
 `BUSY_BAR_STALE_AFTER_SECONDS` remains a legacy shared fallback. Prefer the
 separate status and system thresholds.
@@ -199,6 +224,20 @@ to black backgrounds with condition colors used as accents after sunset. At
 23:00 local time, the monitor sets the hardware brightness to the configured
 late-night level and restores automatic brightness at sunrise. Set
 `BUSY_BAR_LATE_NIGHT_BRIGHTNESS` from 0 to 100 percent; the default is 5.
+
+### FluxHaus status
+
+Set `BUSY_BAR_FLUXHAUS_ENABLED=true`, provide the FluxHaus server origin, and
+configure a dedicated read-only Basic credential. The existing FluxHaus
+aggregate root response is used; BusyBar does not need direct Home Assistant
+access for these cards. The FluxHaus deployment must set the matching
+`DEMO_PASSWORD` for the default `demo` user, or another read-only username and
+password may be supplied.
+
+`BUSY_BAR_FLUXHAUS_POLL_SECONDS` accepts 5 to 3600 seconds and defaults to 10.
+`BUSY_BAR_FLUXHAUS_STALE_AFTER_SECONDS` accepts 10 seconds to one day and
+defaults to 120. Fetch or validation failures are logged and the last good
+snapshot remains available only until that freshness threshold expires.
 
 ## Deployment order
 

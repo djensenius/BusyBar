@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "vp run typecheck && vp run lint && vp run test && vp run build && vp run demo:check",
-    "demo:check": "node --check demo/demo.js",
+    "demo:check": "tsx scripts/generate-fluxhaus-demo-art.ts --check && node --check demo/fluxhaus-art.generated.js && node --check demo/demo.js",
+    "demo:generate": "tsx scripts/generate-fluxhaus-demo-art.ts",
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/index.ts",
     "format": "vp fmt",
     "lint": "vp lint src test",

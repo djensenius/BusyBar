@@ -2,6 +2,7 @@ import type { DisplayDrawParams } from "@busy-app/busy-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { BusyBarDeviceClient } from "../src/busy-client.js";
 import type { MonitorConfig } from "../src/config.js";
+import type { FluxHausSnapshot } from "../src/fluxhaus-client.js";
 import type { HomeAssistantSceneClient, SceneStatus } from "../src/home-assistant-client.js";
 import {
   desiredDisplayBrightness,
@@ -42,6 +43,7 @@ const config: Extract<MonitorConfig, { enabled: true }> = {
   startToggleLightIds: [],
   dialSceneId: null,
   weather: null,
+  fluxHaus: null,
   audioEnabled: false,
   alertSound: null,
   alertCooldownMs: 300_000,
@@ -123,10 +125,44 @@ const summaryWithZeroDailyCards = (): MonitorSummary => ({
   },
 });
 
+const fluxHausSnapshot = (
+  active: Partial<Record<"washer" | "dryer", boolean>>,
+): FluxHausSnapshot => ({
+  generatedAt: new Date().toISOString(),
+  devices: [
+    {
+      id: "washer",
+      name: "Washer",
+      active: active.washer ?? false,
+      lifecycle: active.washer ? "active" : "finished",
+      status: active.washer ? "Running" : "End programmed",
+      detail: "Rinse",
+      progressPercent: active.washer ? 62 : 100,
+      remainingSeconds: active.washer ? 38 * 60 : 0,
+      batteryPercent: null,
+      updatedAt: null,
+    },
+    {
+      id: "dryer",
+      name: "Dryer",
+      active: active.dryer ?? false,
+      lifecycle: active.dryer ? "active" : "finished",
+      status: active.dryer ? "Running" : "End programmed",
+      detail: "Cottons",
+      progressPercent: active.dryer ? 40 : 100,
+      remainingSeconds: active.dryer ? 44 * 60 : 0,
+      batteryPercent: null,
+      updatedAt: null,
+    },
+  ],
+  car: null,
+});
+
 const createClient = (): BusyBarDeviceClient & {
   draw: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
   setBrightness: ReturnType<typeof vi.fn>;
+  playStockSound: ReturnType<typeof vi.fn>;
 } => ({
   draw: vi.fn(() => Promise.resolve()),
   clear: vi.fn(() => Promise.resolve()),
@@ -197,6 +233,569 @@ describe("monitor lifecycle", () => {
       "DAY",
       "12",
     ]);
+    await monitor.stop();
+  });
+
+  it("suppresses startup completions and alerts once when equipment finishes", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        frontRotationMs: 60_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summary());
+    await monitor.start();
+
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER",
+      "CYCLE",
+      "DONE",
+    ]);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(10_250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP",
+      "DAY",
+      "12",
+    ]);
+    await monitor.stop();
+  });
+
+  it("queues simultaneous equipment completions in device order", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true, dryer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false, dryer: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER",
+      "CYCLE",
+      "DONE",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(10_250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "DRYER",
+      "CYCLE",
+      "DONE",
+    ]);
+    expect(client.playStockSound).toHaveBeenCalledTimes(2);
+    await monitor.stop();
+  });
+
+  it("does not treat a paused device as completed", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    const paused = fluxHausSnapshot({ washer: false });
+    paused.devices[0] = {
+      ...paused.devices[0]!,
+      lifecycle: "paused",
+      status: "Pause",
+    };
+    monitor.updateFluxHaus(paused);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "DONE",
+    );
+    await monitor.stop();
+  });
+
+  it("does not treat delayed or unknown device telemetry as completed", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    const delayed = fluxHausSnapshot({ washer: false });
+    delayed.devices[0] = {
+      ...delayed.devices[0]!,
+      lifecycle: "unknown",
+      status: "Waiting to start",
+    };
+    monitor.updateFluxHaus(delayed);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "DONE",
+    );
+    await monitor.stop();
+  });
+
+  it("alerts when an active device reaches an inactive terminal state", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    const inactive = fluxHausSnapshot({ washer: false });
+    inactive.devices[0] = {
+      ...inactive.devices[0]!,
+      lifecycle: "inactive",
+      status: "Off",
+    };
+    monitor.updateFluxHaus(inactive);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("DONE");
+    await monitor.stop();
+  });
+
+  it("queues distinct completion cycles from the same device", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(client.playStockSound).toHaveBeenCalledTimes(2);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER",
+      "CYCLE",
+      "DONE",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(10_250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "DONE",
+    );
+    await monitor.stop();
+  });
+
+  it("retains more than ten unexpired completion events", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        statusStaleAfterMs: 10 * 60_000,
+        systemStaleAfterMs: 10 * 60_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("recording"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    for (let cycle = 0; cycle < 11; cycle += 1) {
+      monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+      monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    }
+
+    monitor.updateStatus({ ...status("idle"), id: 2 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).toHaveBeenCalledTimes(1);
+    for (let cycle = 1; cycle < 11; cycle += 1) {
+      await vi.advanceTimersByTimeAsync(10_250);
+      expect(client.playStockSound).toHaveBeenCalledTimes(cycle + 1);
+    }
+    await monitor.stop();
+  });
+
+  it("pauses carousel rotation while a completion is displayed", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        frontRotationMs: 1_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summary());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("DONE");
+
+    await vi.advanceTimersByTimeAsync(10_250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP",
+      "DAY",
+      "12",
+    ]);
+    await monitor.stop();
+  });
+
+  it("starts completion audio and duration only after a successful draw", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    client.draw.mockRejectedValueOnce(new Error("display unavailable"));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_250);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER",
+      "CYCLE",
+      "DONE",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("DONE");
+    await vi.advanceTimersByTimeAsync(251);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "DONE",
+    );
+    await monitor.stop();
+  });
+
+  it("expires a completion that cannot be drawn", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        statusStaleAfterMs: 10 * 60_000,
+        systemStaleAfterMs: 10 * 60_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    client.draw.mockRejectedValue(new Error("display unavailable"));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(6 * 60_000);
+    client.draw.mockResolvedValue(undefined);
+    monitor.updateSystem(system());
+    monitor.updateStatus({ ...status("idle"), id: 2 });
+    await vi.advanceTimersByTimeAsync(30_250);
+
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "DONE",
+    );
+    await monitor.stop();
+  });
+
+  it("does not confirm a completion draw after shutdown begins", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+
+    let resolveDraw: (() => void) | undefined;
+    client.draw.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDraw = resolve;
+        }),
+    );
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+    await vi.advanceTimersByTimeAsync(250);
+
+    const stopping = monitor.stop();
+    resolveDraw?.();
+    await stopping;
+
+    expect(client.playStockSound).not.toHaveBeenCalled();
+  });
+
+  it("retains completions until system telemetry is renderable", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    client.playStockSound.mockClear();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "OFFLINE",
+    ]);
+
+    monitor.updateSystem(system());
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER",
+      "CYCLE",
+      "DONE",
+    ]);
+    await monitor.stop();
+  });
+
+  it("expires deferred completions and resets stale FluxHaus baselines", async () => {
+    const client = createClient();
+    const fluxHausConfig = {
+      url: "https://haus.example.com",
+      username: "demo",
+      password: "secret",
+      pollIntervalMs: 10_000,
+      staleAfterMs: 120_000,
+    };
+    const monitor = new Monitor(
+      {
+        ...config,
+        statusStaleAfterMs: 10 * 60_000,
+        systemStaleAfterMs: 10 * 60_000,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: fluxHausConfig,
+      },
+      client,
+    );
+    monitor.updateStatus(status("recording"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+
+    await vi.advanceTimersByTimeAsync(6 * 60_000);
+    monitor.updateSystem(system());
+    monitor.updateStatus({ ...status("idle"), id: 2 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    await vi.advanceTimersByTimeAsync(fluxHausConfig.staleAfterMs + 1);
+    monitor.updateSystem(system());
+    monitor.updateStatus({ ...status("idle"), id: 3 });
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    await monitor.stop();
+  });
+
+  it("rotates the complete active FluxHaus group after each normal card", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        frontRotationMs: 1_000,
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    monitor.updateSummary(summary());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true, dryer: true }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP",
+      "DAY",
+      "12",
+    ]);
+    for (const expected of [
+      ["WASHER", "RINSE", "38M"],
+      ["DRYER", "COTTONS", "44M"],
+      ["MSGS", "DAY", "8"],
+      ["WASHER", "RINSE", "38M"],
+      ["DRYER", "COTTONS", "44M"],
+    ]) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(
+        expected,
+      );
+    }
     await monitor.stop();
   });
 

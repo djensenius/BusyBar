@@ -1,11 +1,21 @@
 import { aggregateSystemHealthSeverity } from "./health.js";
 import type { HomeAssistantSceneClient } from "./home-assistant-client.js";
+import type {
+  FluxHausDeviceId,
+  FluxHausSnapshot,
+} from "./fluxhaus-client.js";
 import { log } from "./logger.js";
 import type { BusyBarDeviceClient } from "./busy-client.js";
 import type { MonitorConfig } from "./config.js";
 import type { BusyBarInputEvent, BusyBarInputStreamHandle } from "./input-stream.js";
 import { startBusyBarInputStream } from "./input-stream.js";
-import type { BackPage, IdleMode, MonitorState, SceneAnnouncement } from "./renderer.js";
+import type {
+  BackPage,
+  CompletionAlert,
+  IdleMode,
+  MonitorState,
+  SceneAnnouncement,
+} from "./renderer.js";
 import { availableFrontFrames, DEFAULT_FRONT_FRAME, renderMonitor } from "./renderer.js";
 import type {
   BoothStatus,
@@ -18,6 +28,15 @@ import type { WeatherSnapshot } from "./weather-client.js";
 const BACK_PAGE_COUNT = 4;
 const SMART_HOME_POLL_INTERVAL_MS = 30_000;
 const SMART_HOME_BACK_DISPLAY_MS = 4_000;
+const COMPLETION_ALERT_MS = 10_000;
+const COMPLETION_EXPIRY_MS = 5 * 60_000;
+const COMPLETION_DEVICE_ORDER: readonly FluxHausDeviceId[] = [
+  "washer",
+  "dryer",
+  "dishwasher",
+  "broombot",
+  "mopbot",
+];
 
 export const nextBackPage = (page: BackPage, direction: number): BackPage =>
   ((((page + direction) % BACK_PAGE_COUNT) + BACK_PAGE_COUNT) % BACK_PAGE_COUNT) as BackPage;
@@ -25,11 +44,13 @@ export const nextBackPage = (page: BackPage, direction: number): BackPage =>
 const nextFrontFrame = (
   current: MonitorState["frontFrame"],
   frames: readonly MonitorState["frontFrame"][],
-): MonitorState["frontFrame"] => {
-  if (frames.length === 0) return DEFAULT_FRONT_FRAME;
-  const index = frames.indexOf(current);
-  const currentIndex = index >= 0 ? index : 0;
-  return frames[(currentIndex + 1) % frames.length] ?? frames[0] ?? DEFAULT_FRONT_FRAME;
+  currentIndex: number,
+): { frame: MonitorState["frontFrame"]; index: number } => {
+  if (frames.length === 0) return { frame: DEFAULT_FRONT_FRAME, index: 0 };
+  const matchingIndex =
+    frames[currentIndex] === current ? currentIndex : Math.max(0, frames.indexOf(current));
+  const index = (matchingIndex + 1) % frames.length;
+  return { frame: frames[index] ?? frames[0] ?? DEFAULT_FRONT_FRAME, index };
 };
 
 const IDLE_MODES: readonly IdleMode[] = [
@@ -114,6 +135,9 @@ export class Monitor {
     summary: null,
     weather: null,
     weatherReceivedAtMs: null,
+    fluxHaus: null,
+    fluxHausReceivedAtMs: null,
+    completionAlert: null,
     frontFrame: DEFAULT_FRONT_FRAME,
     idleMode: "all",
     idleModeAnnouncement: null,
@@ -151,6 +175,12 @@ export class Monitor {
   #routerTelemetrySourceAtMs: number | null = null;
   #routerTelemetrySourceSignature: string | null = null;
   #summarySourceAtMs: number | null = null;
+  #fluxHausSourceAtMs: number | null = null;
+  #fluxHausSourceSignature: string | null = null;
+  #fluxHausInitialized = false;
+  #frontFrameIndex = 0;
+  readonly #completionQueue: CompletionAlert[] = [];
+  #completionTimer: NodeJS.Timeout | null = null;
   #brightnessValue: number | "auto" | null = null;
   #brightnessUpdating = false;
   #brightnessQueued = false;
@@ -201,14 +231,17 @@ export class Monitor {
     this.#freshnessTimer = setInterval(() => {
       this.#scheduleRender();
       this.#scheduleBrightness();
+      this.#showNextCompletion();
     }, 5_000);
     this.#freshnessTimer.unref();
     this.#rotationTimer = setInterval(() => {
-      if (this.#state.status?.state !== "idle") return;
+      if (this.#state.status?.state !== "idle" || this.#state.completionAlert) return;
       const frames = availableFrontFrames(this.#state, this.#config, Date.now());
+      const next = nextFrontFrame(this.#state.frontFrame, frames, this.#frontFrameIndex);
+      this.#frontFrameIndex = next.index;
       this.#state = {
         ...this.#state,
-        frontFrame: nextFrontFrame(this.#state.frontFrame, frames),
+        frontFrame: next.frame,
       };
       this.#scheduleRender();
     }, this.#config.frontRotationMs);
@@ -221,6 +254,7 @@ export class Monitor {
       }, SMART_HOME_POLL_INTERVAL_MS);
       this.#smartHomePollTimer.unref();
     }
+    this.#showNextCompletion();
     this.#scheduleRender();
     log.info("BUSY Bar monitor started");
   }
@@ -270,6 +304,8 @@ export class Monitor {
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
       frontFrame: status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
+    if (status.state === "idle" && wasActive) this.#frontFrameIndex = 0;
+    this.#showNextCompletion();
     this.#scheduleRender();
   }
 
@@ -296,6 +332,8 @@ export class Monitor {
       systemReceivedAtMs: Math.min(receivedAtMs, Date.now()),
       frontFrame: recovered ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
+    if (recovered) this.#frontFrameIndex = 0;
+    this.#showNextCompletion();
     this.#scheduleRender();
   }
 
@@ -346,6 +384,145 @@ export class Monitor {
     };
     this.#scheduleBrightness();
     this.#scheduleRender();
+  }
+
+  updateFluxHaus(snapshot: FluxHausSnapshot, receivedAtMs = Date.now()): void {
+    const generatedAtMs = Date.parse(snapshot.generatedAt);
+    const sourceAtMs = Math.min(
+      Number.isFinite(generatedAtMs) ? generatedAtMs : receivedAtMs,
+      receivedAtMs,
+      Date.now(),
+    );
+    const sourceSignature = JSON.stringify(snapshot);
+    if (this.#fluxHausSourceAtMs !== null && sourceAtMs < this.#fluxHausSourceAtMs) return;
+    if (
+      sourceAtMs === this.#fluxHausSourceAtMs &&
+      sourceSignature === this.#fluxHausSourceSignature
+    ) {
+      this.#state = {
+        ...this.#state,
+        fluxHausReceivedAtMs: Math.max(
+          this.#state.fluxHausReceivedAtMs ?? 0,
+          Math.min(receivedAtMs, Date.now()),
+        ),
+      };
+      this.#showNextCompletion();
+      this.#scheduleRender();
+      return;
+    }
+
+    const previousReceivedAtMs = this.#state.fluxHausReceivedAtMs;
+    const previousFresh =
+      previousReceivedAtMs !== null &&
+      receivedAtMs - previousReceivedAtMs <= (this.#config.fluxHaus?.staleAfterMs ?? 0);
+    const previousById = new Map(
+      (this.#state.fluxHaus?.devices ?? []).map((device) => [device.id, device]),
+    );
+    const nextById = new Map(snapshot.devices.map((device) => [device.id, device]));
+    const completed = this.#fluxHausInitialized && previousFresh
+      ? COMPLETION_DEVICE_ORDER.flatMap((id) => {
+          const previous = previousById.get(id);
+          const next = nextById.get(id);
+          return previous &&
+            previous.active &&
+            (next?.lifecycle === "finished" || next?.lifecycle === "inactive")
+            ? [{ id, label: next.name, occurredAtMs: receivedAtMs } satisfies CompletionAlert]
+            : [];
+        })
+      : [];
+
+    this.#fluxHausInitialized = true;
+    this.#fluxHausSourceAtMs = sourceAtMs;
+    this.#fluxHausSourceSignature = sourceSignature;
+    const nextState = {
+      ...this.#state,
+      fluxHaus: snapshot,
+      fluxHausReceivedAtMs: Math.min(receivedAtMs, Date.now()),
+    };
+    const frames = availableFrontFrames(nextState, this.#config, Date.now());
+    if (frames[this.#frontFrameIndex] !== nextState.frontFrame) {
+      const matchingIndex = frames.indexOf(nextState.frontFrame);
+      this.#frontFrameIndex = matchingIndex >= 0 ? matchingIndex : 0;
+      nextState.frontFrame = frames[this.#frontFrameIndex] ?? DEFAULT_FRONT_FRAME;
+    }
+    this.#state = nextState;
+    for (const alert of completed) {
+      this.#completionQueue.push(alert);
+    }
+    this.#showNextCompletion();
+    this.#scheduleRender();
+  }
+
+  #showNextCompletion(): void {
+    if (!this.#started || this.#stopped || this.#state.completionAlert || this.#completionTimer) {
+      return;
+    }
+    const now = Date.now();
+    while (
+      this.#completionQueue[0] &&
+      now - this.#completionQueue[0].occurredAtMs > COMPLETION_EXPIRY_MS
+    ) {
+      this.#completionQueue.shift();
+    }
+    if (
+      this.#state.status?.state !== "idle" ||
+      aggregateSystemHealthSeverity(this.#state.system?.snapshot) !== "ok" ||
+      this.#state.statusReceivedAtMs === null ||
+      now - this.#state.statusReceivedAtMs > this.#config.statusStaleAfterMs ||
+      this.#state.system === null ||
+      this.#state.systemReceivedAtMs === null ||
+      now - this.#state.systemReceivedAtMs > this.#config.systemStaleAfterMs ||
+      !this.#state.cloudConnected
+    ) {
+      return;
+    }
+    const completionAlert = this.#completionQueue.shift();
+    if (!completionAlert) return;
+    this.#state = { ...this.#state, completionAlert };
+    this.#scheduleRender();
+  }
+
+  #confirmCompletionDisplayed(completionAlert: CompletionAlert | null): void {
+    this.#discardExpiredUndisplayedCompletion(Date.now());
+    if (
+      this.#stopped ||
+      !completionAlert ||
+      this.#state.completionAlert !== completionAlert ||
+      this.#completionTimer
+    ) {
+      return;
+    }
+    void this.#playCompletionAlertSound(completionAlert);
+    this.#completionTimer = setTimeout(() => {
+      this.#completionTimer = null;
+      if (this.#stopped) return;
+      this.#state = { ...this.#state, completionAlert: null };
+      this.#scheduleRender();
+      this.#showNextCompletion();
+    }, COMPLETION_ALERT_MS);
+    this.#completionTimer.unref();
+  }
+
+  #discardExpiredUndisplayedCompletion(now: number): void {
+    const completionAlert = this.#state.completionAlert;
+    if (
+      !completionAlert ||
+      this.#completionTimer ||
+      now - completionAlert.occurredAtMs <= COMPLETION_EXPIRY_MS
+    ) {
+      return;
+    }
+    this.#state = { ...this.#state, completionAlert: null };
+    this.#showNextCompletion();
+  }
+
+  async #playCompletionAlertSound(alert: CompletionAlert): Promise<void> {
+    if (!this.#config.audioEnabled || !this.#config.alertSound) return;
+    try {
+      await this.#client.playStockSound(this.#config.applicationName, this.#config.alertSound);
+    } catch (error) {
+      log.warn({ err: error, device: alert.id }, "BUSY Bar completion alert audio failed");
+    }
   }
 
   #scheduleBrightness(): void {
@@ -542,6 +719,7 @@ export class Monitor {
       const idleMode = nextIdleMode(this.#state.idleMode, event.delta);
       const state = { ...this.#state, idleMode };
       const frames = availableFrontFrames(state, this.#config, Date.now());
+      this.#frontFrameIndex = 0;
       this.#state = {
         ...state,
         frontFrame: frames[0] ?? DEFAULT_FRONT_FRAME,
@@ -608,11 +786,13 @@ export class Monitor {
   async #render(): Promise<void> {
     this.#rendering = true;
     try {
+      const now = Date.now();
+      this.#discardExpiredUndisplayedCompletion(now);
       const wasDisconnected = !this.#state.cloudConnected;
       const rendered = renderMonitor(
         wasDisconnected ? { ...this.#state, cloudConnected: true } : this.#state,
         this.#config,
-        Date.now(),
+        now,
       );
       if (wasDisconnected || rendered.signature !== this.#renderSignature) {
         await this.#client.draw(rendered.payload);
@@ -622,9 +802,11 @@ export class Monitor {
       this.#retryAttempt = 0;
       if (this.#retryTimer) clearTimeout(this.#retryTimer);
       this.#retryTimer = null;
+      this.#confirmCompletionDisplayed(rendered.renderedCompletionAlert);
       await this.#maybeAlert(rendered.alertKind);
       if (wasDisconnected) {
         this.#state = { ...this.#state, frontFrame: DEFAULT_FRONT_FRAME };
+        this.#frontFrameIndex = 0;
         this.#scheduleRender();
       }
     } catch (error) {
@@ -678,6 +860,7 @@ export class Monitor {
     if (this.#idleModeAnnouncementTimer) clearTimeout(this.#idleModeAnnouncementTimer);
     if (this.#sceneAnnouncementTimer) clearTimeout(this.#sceneAnnouncementTimer);
     if (this.#backPageRestoreTimer) clearTimeout(this.#backPageRestoreTimer);
+    if (this.#completionTimer) clearTimeout(this.#completionTimer);
     this.#inputStream?.stop();
     this.#stopPromise = (async () => {
       if (this.#activeRender) {

@@ -1,6 +1,7 @@
 import { createBusyBarDeviceClient } from "./busy-client.js";
 import { resolveConfig } from "./config.js";
 import { createHomeAssistantSceneClient } from "./home-assistant-client.js";
+import { startFluxHausPolling } from "./fluxhaus-client.js";
 import { log } from "./logger.js";
 import { Monitor } from "./monitor.js";
 import {
@@ -60,6 +61,9 @@ export const start = async (): Promise<void> => {
   const weatherPolling = config.weather
     ? startHomeAssistantWeatherPolling(config.weather, monitor)
     : null;
+  const fluxHausPolling = config.fluxHaus
+    ? startFluxHausPolling(config.fluxHaus, monitor)
+    : null;
 
   let stopping = false;
   const shutdown = (): void => {
@@ -69,6 +73,7 @@ export const start = async (): Promise<void> => {
     polling.stop();
     summaryPolling.stop();
     weatherPolling?.stop();
+    fluxHausPolling?.stop();
     void monitor.stop().finally(() => {
       process.exitCode = 0;
     });
