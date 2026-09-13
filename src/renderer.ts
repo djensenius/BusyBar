@@ -1392,7 +1392,7 @@ const fluxHausDeviceForFrame = (
   return id ? (snapshot?.devices.find((device) => device.id === id) ?? null) : null;
 };
 
-const fluxHausPalette = (
+export const fluxHausPalette = (
   id: FluxHausDeviceId | "car" | "complete",
 ): { background: Gradient; accent: string; icon: string } => {
   switch (id) {

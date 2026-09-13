@@ -230,6 +230,22 @@ describe("FluxHaus client", () => {
     ]);
   });
 
+  it("keeps unknown dishwasher states non-terminal", () => {
+    expect(
+      parseFluxHausSnapshot({
+        timestamp: "2026-09-12T17:00:00.000Z",
+        dishwasher: {
+          operationState: "Error",
+          programProgress: 50,
+        },
+      }).devices[0],
+    ).toMatchObject({
+      id: "dishwasher",
+      active: false,
+      lifecycle: "unknown",
+    });
+  });
+
   it("omits incomplete car data without discarding equipment", () => {
     expect(
       parseFluxHausSnapshot({

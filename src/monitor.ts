@@ -401,7 +401,10 @@ export class Monitor {
     ) {
       this.#state = {
         ...this.#state,
-        fluxHausReceivedAtMs: Math.min(receivedAtMs, Date.now()),
+        fluxHausReceivedAtMs: Math.max(
+          this.#state.fluxHausReceivedAtMs ?? 0,
+          Math.min(receivedAtMs, Date.now()),
+        ),
       };
       this.#showNextCompletion();
       this.#scheduleRender();

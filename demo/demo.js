@@ -205,10 +205,6 @@ const fluxHausDesigns = [
     title: "WASHER",
     detail: "RINSE",
     value: "38M",
-    start: COLORS.blueDark,
-    end: COLORS.cyanDark,
-    accent: "#72dcffff",
-    iconAccent: "#bdefffff",
   },
   {
     icon: "washer",
@@ -216,18 +212,12 @@ const fluxHausDesigns = [
     detail: "62% DONE",
     value: "18M",
     dark: true,
-    accent: "#173e4aff",
-    iconAccent: "#72dcffff",
   },
   {
     icon: "dryer",
     title: "DRYER",
     detail: "COTTON",
     value: "44M",
-    start: "#78350fff",
-    end: "#c65d08ff",
-    accent: "#ffb34aff",
-    iconAccent: "#ffd18aff",
   },
   {
     icon: "dryer",
@@ -235,18 +225,12 @@ const fluxHausDesigns = [
     detail: "COOL",
     value: "9M",
     dark: true,
-    accent: "#4d2a0aff",
-    iconAccent: "#ff9f32ff",
   },
   {
     icon: "dishwasher",
     title: "DISH",
     detail: "ECO 50",
     value: "1H12",
-    start: COLORS.blueDark,
-    end: "#245f79ff",
-    accent: "#7dd3fcff",
-    iconAccent: "#d9efffff",
   },
   {
     icon: "dishwasher",
@@ -254,18 +238,12 @@ const fluxHausDesigns = [
     detail: "WASHING",
     value: "28%",
     dark: true,
-    accent: "#173446ff",
-    iconAccent: "#7dd3fcff",
   },
   {
     icon: "broombot",
     title: "BROOM",
     detail: "CLEAN",
     value: "84%",
-    start: "#14532dff",
-    end: "#23894aff",
-    accent: "#73e895ff",
-    iconAccent: "#c8f7d5ff",
   },
   {
     icon: "broombot",
@@ -273,18 +251,12 @@ const fluxHausDesigns = [
     detail: "TO DOCK",
     value: "31%",
     dark: true,
-    accent: "#173b25ff",
-    iconAccent: "#73e895ff",
   },
   {
     icon: "mopbot",
     title: "MOP",
     detail: "MOPPING",
     value: "73%",
-    start: "#075985ff",
-    end: "#0f766eff",
-    accent: "#5eead4ff",
-    iconAccent: "#ccfbf1ff",
   },
   {
     icon: "mopbot",
@@ -292,18 +264,12 @@ const fluxHausDesigns = [
     detail: "TO DOCK",
     value: "22%",
     dark: true,
-    accent: "#123d3aff",
-    iconAccent: "#5eead4ff",
   },
   {
     icon: "airPurifier",
     title: "AIR",
     detail: "AUTO PM8",
     value: "42%",
-    start: "#1e293bff",
-    end: "#334155ff",
-    accent: "#94a3b8ff",
-    iconAccent: "#e2e8f0ff",
   },
   {
     icon: "airPurifier",
@@ -311,18 +277,12 @@ const fluxHausDesigns = [
     detail: "NIGHT PM4",
     value: "18%",
     dark: true,
-    accent: "#273449ff",
-    iconAccent: "#94a3b8ff",
   },
   {
     icon: "car",
     title: "CAR",
     detail: "356KM",
     value: "78%",
-    start: "#3f3f46ff",
-    end: "#71717aff",
-    accent: "#facc15ff",
-    iconAccent: "#fef08aff",
   },
   {
     icon: "car",
@@ -330,18 +290,12 @@ const fluxHausDesigns = [
     detail: "78% 356KM",
     value: "12M",
     dark: true,
-    accent: "#453d16ff",
-    iconAccent: "#facc15ff",
   },
   {
     icon: "complete",
     title: "WASHER",
     detail: "CYCLE",
     value: "DONE",
-    start: "#14532dff",
-    end: "#22c55eff",
-    accent: "#86efacff",
-    iconAccent: "#dcfce7ff",
   },
   {
     icon: "complete",
@@ -349,16 +303,21 @@ const fluxHausDesigns = [
     detail: "CYCLE",
     value: "DONE",
     dark: true,
-    accent: "#173b25ff",
-    iconAccent: "#86efacff",
   },
-].map((design, index) => ({
-  kind: "fluxhaus",
-  review: true,
-  name: `FluxHaus - ${design.title.toLowerCase()} ${design.dark ? "night" : "day"}`,
-  ...design,
-  concept: Math.floor(index / 2) + 1,
-}));
+].map((design, index) => {
+  const palette = globalThis.FLUX_HAUS_ART.palettes[design.icon];
+  return {
+    kind: "fluxhaus",
+    review: true,
+    name: `FluxHaus - ${design.title.toLowerCase()} ${design.dark ? "night" : "day"}`,
+    ...design,
+    start: palette.background[0],
+    end: palette.background[1],
+    accent: palette.accent,
+    iconAccent: palette.icon,
+    concept: Math.floor(index / 2) + 1,
+  };
+});
 
 const designs = [
   {
@@ -1024,117 +983,11 @@ const drawProblem = (context, design, blink) => {
   context.fillText(design.label, 44, 8);
 };
 
-const drawFluxHausIcon = (context, icon, accent) => {
-  context.fillStyle = "#05070bcc";
-  context.fillRect(0, 0, 19, 16);
-  context.fillStyle = accent;
-
-  if (icon === "washer" || icon === "dryer") {
-    context.fillRect(3, 1, 12, 1);
-    context.fillRect(3, 14, 12, 1);
-    context.fillRect(3, 2, 1, 12);
-    context.fillRect(14, 2, 1, 12);
-    context.fillRect(5, 3, 2, 1);
-    context.fillRect(11, 3, 2, 1);
-    context.fillRect(5, 6, 1, 5);
-    context.fillRect(12, 6, 1, 5);
-    context.fillRect(6, 5, 6, 1);
-    context.fillRect(6, 11, 6, 1);
-    if (icon === "dryer") {
-      context.fillRect(7, 7, 1, 3);
-      context.fillRect(9, 6, 1, 3);
-      context.fillRect(11, 7, 1, 3);
-    } else {
-      context.fillRect(6, 9, 2, 1);
-      context.fillRect(8, 10, 3, 1);
-      context.fillRect(11, 9, 1, 1);
-    }
-    return;
+const drawFluxHausIcon = (context, icon) => {
+  for (const rectangle of globalThis.FLUX_HAUS_ART.icons[icon]) {
+    context.fillStyle = rectangle.color;
+    context.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
   }
-
-  if (icon === "dishwasher") {
-    context.fillRect(3, 1, 12, 1);
-    context.fillRect(3, 2, 1, 12);
-    context.fillRect(14, 2, 1, 12);
-    context.fillRect(4, 4, 10, 1);
-    context.fillRect(4, 13, 10, 1);
-    context.fillRect(5, 10, 8, 1);
-    context.fillRect(6, 7, 1, 3);
-    context.fillRect(9, 6, 1, 4);
-    context.fillRect(12, 8, 1, 2);
-    context.fillRect(6, 3, 6, 1);
-    return;
-  }
-
-  if (icon === "broombot" || icon === "mopbot") {
-    context.fillRect(5, 3, 8, 1);
-    context.fillRect(3, 5, 2, 6);
-    context.fillRect(13, 5, 2, 6);
-    context.fillRect(5, 12, 8, 1);
-    context.fillRect(4, 4, 2, 1);
-    context.fillRect(12, 4, 2, 1);
-    context.fillRect(4, 11, 2, 1);
-    context.fillRect(12, 11, 2, 1);
-    context.fillRect(8, 5, 2, 2);
-    context.fillRect(7, 9, 4, 1);
-    if (icon === "mopbot") {
-      context.fillRect(8, 13, 2, 1);
-      context.fillRect(7, 14, 4, 1);
-      context.fillRect(1, 5, 1, 2);
-      context.fillRect(0, 7, 3, 2);
-    } else {
-      context.fillRect(1, 12, 4, 1);
-      context.fillRect(13, 12, 4, 1);
-      context.fillRect(2, 13, 1, 2);
-      context.fillRect(15, 13, 1, 2);
-    }
-    return;
-  }
-
-  if (icon === "airPurifier") {
-    context.fillRect(5, 1, 8, 1);
-    context.fillRect(5, 14, 8, 1);
-    context.fillRect(5, 2, 1, 12);
-    context.fillRect(12, 2, 1, 12);
-    context.fillRect(8, 4, 2, 2);
-    context.fillRect(7, 6, 1, 2);
-    context.fillRect(10, 6, 1, 2);
-    context.fillRect(8, 8, 2, 2);
-    context.fillRect(7, 12, 4, 1);
-    context.fillRect(15, 4, 2, 1);
-    context.fillRect(14, 7, 3, 1);
-    context.fillRect(15, 10, 2, 1);
-    return;
-  }
-
-  if (icon === "car") {
-    context.fillRect(4, 6, 9, 1);
-    context.fillRect(2, 8, 14, 1);
-    context.fillRect(1, 9, 1, 3);
-    context.fillRect(16, 9, 1, 3);
-    context.fillRect(2, 12, 14, 1);
-    context.fillRect(5, 5, 7, 1);
-    context.fillRect(4, 7, 1, 1);
-    context.fillRect(13, 7, 1, 1);
-    context.fillRect(4, 11, 3, 3);
-    context.fillRect(12, 11, 3, 3);
-    context.fillStyle = "#05070c";
-    context.fillRect(5, 12, 1, 1);
-    context.fillRect(13, 12, 1, 1);
-    context.fillStyle = accent;
-    context.fillRect(7, 7, 4, 1);
-    return;
-  }
-
-  context.fillRect(3, 2, 12, 1);
-  context.fillRect(2, 3, 1, 10);
-  context.fillRect(15, 3, 1, 10);
-  context.fillRect(3, 13, 12, 1);
-  context.fillRect(5, 7, 2, 2);
-  context.fillRect(7, 9, 2, 2);
-  context.fillRect(8, 8, 2, 2);
-  context.fillRect(10, 6, 2, 2);
-  context.fillRect(12, 4, 2, 2);
 };
 
 const drawFluxHaus = (context, design) => {
@@ -1142,7 +995,7 @@ const drawFluxHaus = (context, design) => {
     ? COLORS.black
     : gradient(context, design.start, design.end);
   context.fillRect(0, 0, 72, 16);
-  drawFluxHausIcon(context, design.icon, design.iconAccent);
+  drawFluxHausIcon(context, design.icon);
 
   context.fillStyle = design.dark ? design.accent : "#05070ccc";
   context.fillRect(54, 1, 17, 14);

@@ -225,9 +225,9 @@ const normalizeDishwasher = (
           ? "finished"
           : device.operationState === "Run"
             ? "unknown"
-          : device.operationState
-            ? "inactive"
-            : "unknown";
+            : device.operationState === "Inactive"
+              ? "inactive"
+              : "unknown";
   return {
     id: "dishwasher",
     name: "Dishwasher",
