@@ -267,10 +267,16 @@ export class Monitor {
     log.info("BUSY Bar monitor started");
   }
 
-  updateStatus(status: BoothStatus, receivedAtMs = Date.now()): void {
+  updateStatus(
+    status: BoothStatus,
+    receivedAtMs = Date.now(),
+    source: "poll" | "stream" = "poll",
+  ): void {
     // Lifecycle is operator-controlled, not ordered by the booth timestamp.
     // A synthetic epoch response can end a recently observed active call.
-    if (status.installationState !== undefined) {
+    // Only the non-overlapping REST polls own lifecycle. Delayed stream frames
+    // cannot undo a newer end, even if they carry an old active marker.
+    if (source === "poll") {
       this.#state = {
         ...this.#state,
         installationState: status.installationState,

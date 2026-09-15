@@ -232,6 +232,16 @@ describe("monitor lifecycle", () => {
       "BETWEEN",
     ]);
     expect(client.playStockSound).not.toHaveBeenCalled();
+    monitor.updateStatus(
+      { ...status("recording"), installationState: "active" },
+      Date.now(),
+      "stream",
+    );
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "BETWEEN",
+    ]);
+    expect(client.playStockSound).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(20_000);
     monitor.updateStatus(inactive);
     await vi.advanceTimersByTimeAsync(250);

@@ -81,7 +81,7 @@ export interface OperatorFeedHandle {
 }
 
 export interface OperatorMonitor {
-  updateStatus(status: BoothStatus, receivedAtMs?: number): void;
+  updateStatus(status: BoothStatus, receivedAtMs?: number, source?: "poll" | "stream"): void;
   updateSystem(system: BoothSystemSnapshotEnvelope, receivedAtMs?: number): void;
   updateRouterTelemetry(router: RouterTelemetryEnvelope, receivedAtMs?: number): void;
   updateSummary(summary: MonitorSummary): void;
@@ -126,7 +126,7 @@ export const startOperatorStream = (
       const parsed = WsEnvelopeSchema.safeParse(raw);
       if (!parsed.success) return;
       if (parsed.data.kind === "status") {
-        monitor.updateStatus(parsed.data.status);
+        monitor.updateStatus(parsed.data.status, Date.now(), "stream");
       } else if (parsed.data.boothId === boothId) {
         monitor.updateSystem({
           boothId: parsed.data.boothId,
