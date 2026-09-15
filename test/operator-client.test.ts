@@ -191,6 +191,41 @@ describe("Operator REST client", () => {
     });
   });
 
+  it.each(["status", "system", "router"] as const)("reports a failed %s API feed independently of expected missing telemetry", async (feedName) => {
+    const failedPath = {
+      status: "/v1/status",
+      system: "/v1/system/current",
+      router: "/v1/system/components/current",
+    }[feedName];
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>((input) => {
+      const url = input.toString();
+      if (url.includes(failedPath)) return Promise.resolve(response(null, 503));
+      if (url.includes("/v1/status")) {
+        return Promise.resolve(response({
+          state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+          isSynthetic: true, installationState: "between_exhibitions",
+        }));
+      }
+      return Promise.resolve(url.includes("/components/") ? response([]) : response(null, 404));
+    }));
+    const monitor = {
+      updateOperatorFeedHealth: vi.fn(),
+      updateStatus: vi.fn(),
+      updateSystem: vi.fn(),
+      updateRouterTelemetry: vi.fn(),
+      updateSummary: vi.fn(),
+    };
+    const feed = startOperatorPolling("https://operator.example.com", "token", "booth-01", monitor);
+    try {
+      await vi.waitFor(() => {
+        expect(monitor.updateOperatorFeedHealth).toHaveBeenCalledWith(feedName, false);
+        expect(monitor.updateOperatorFeedHealth).toHaveBeenCalledTimes(3);
+      });
+    } finally {
+      feed.stop();
+    }
+  });
+
   it("starts recovery polling without waiting for an initial API read", async () => {
     vi.stubGlobal(
       "fetch",
@@ -216,6 +251,7 @@ describe("Operator REST client", () => {
       }),
     );
     const monitor = {
+      updateOperatorFeedHealth: vi.fn(),
       updateStatus: vi.fn(),
       updateSystem: vi.fn(),
       updateRouterTelemetry: vi.fn(),
@@ -225,6 +261,7 @@ describe("Operator REST client", () => {
     const feed = startOperatorPolling("https://operator.example.com", "token", "booth-01", monitor);
     await vi.waitFor(() => {
       expect(monitor.updateStatus).toHaveBeenCalledOnce();
+      expect(monitor.updateOperatorFeedHealth).toHaveBeenCalledWith("system", true);
     });
     feed.stop();
   });

@@ -77,6 +77,7 @@ export interface SmartHomeAction {
 export interface MonitorState {
   installationState?: BoothStatus["installationState"];
   installationStateReceivedAtMs?: number;
+  operatorApiError?: boolean;
   status: BoothStatus | null;
   statusReceivedAtMs: number | null;
   system: BoothSystemSnapshotEnvelope | null;
@@ -897,7 +898,7 @@ const backLines = (
     if (isBetweenExhibitions(state, config, nowMs)) {
       return [
         "BETWEEN EXHIBITIONS",
-        "OFFLINE IS EXPECTED",
+        state.operatorApiError ? "OPERATOR API ERROR" : "OFFLINE IS EXPECTED",
         "CALLS PAUSED",
         "START NEXT EXHIBITION",
         "IN OPERATOR CONSOLE",
@@ -1965,8 +1966,9 @@ export const renderMonitor = (
 ): MonitorRender => {
   const betweenExhibitions = isBetweenExhibitions(state, config, nowMs);
   const offline =
-    !betweenExhibitions &&
-    statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs);
+    state.operatorApiError === true ||
+    (!betweenExhibitions &&
+      statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs));
   const currentBoothError =
     state.status?.state === "error" &&
     !statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs);
@@ -1979,7 +1981,12 @@ export const renderMonitor = (
   const renderedCompletionAlert =
     !offline && boothState === "idle" && !health.view ? state.completionAlert : null;
   const frontView: FrontPresentation = offline
-    ? warningPresentation("OFFLINE", [COLORS.redDark, COLORS.red], COLORS.red, COLORS.red)
+    ? warningPresentation(
+        state.operatorApiError ? "API ERROR" : "OFFLINE",
+        [COLORS.redDark, COLORS.red],
+        COLORS.red,
+        COLORS.red,
+      )
     : boothState && boothState !== "idle"
       ? statePresentation(boothState)
       : (health.view ??

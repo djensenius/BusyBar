@@ -176,6 +176,7 @@ export class Monitor {
   #statusSourceRepeatCount: number | null = null;
   #statusSourceSignature: string | null = null;
   #statusLifecycleBoundaryAtMs: number | null = null;
+  readonly #failedOperatorFeeds = new Set<"status" | "system" | "router">();
   #systemSourceAtMs: number | null = null;
   #systemSourceSignature: string | null = null;
   #routerTelemetrySourceAtMs: number | null = null;
@@ -266,6 +267,13 @@ export class Monitor {
     this.#showNextCompletion();
     this.#scheduleRender();
     log.info("BUSY Bar monitor started");
+  }
+
+  updateOperatorFeedHealth(feed: "status" | "system" | "router", healthy: boolean): void {
+    if (healthy) this.#failedOperatorFeeds.delete(feed);
+    else this.#failedOperatorFeeds.add(feed);
+    this.#state = { ...this.#state, operatorApiError: this.#failedOperatorFeeds.size > 0 };
+    this.#scheduleRender();
   }
 
   updateStatus(

@@ -63,7 +63,9 @@ Lifecycle is reconciled by status polling even when the API returns a synthetic,
 id-less status; that response never counts as a fresh booth heartbeat.
 If lifecycle confirmation itself becomes stale, normal offline alarms return.
 Older servers that omit the field retain existing behavior. BUSY Cloud/device
-failures and fresh critical hardware readings are still reported.
+failures and fresh critical hardware readings are still reported. Failed Operator
+status, system, or router requests show `API ERROR`, independently of expected
+booth downtime; the alert clears only after every failed feed recovers.
 
 Pickup, message, breakout, and active-state cards use Canadian
 telephone-booth pixel art.

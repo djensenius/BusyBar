@@ -295,6 +295,25 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("does not mask API failures with expected downtime or another feed's recovery", async () => {
+    const client = createClient();
+    const monitor = new Monitor(config, client);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    monitor.updateOperatorFeedHealth("system", false);
+    monitor.updateOperatorFeedHealth("status", false);
+    monitor.updateOperatorFeedHealth("system", true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("API ERROR");
+    monitor.updateOperatorFeedHealth("status", true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
+    await monitor.stop();
+  });
+
   it("renders the latest active state", async () => {
     const client = createClient();
     const monitor = new Monitor(config, client);
