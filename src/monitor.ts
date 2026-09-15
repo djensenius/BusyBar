@@ -295,7 +295,14 @@ export class Monitor {
       status.isSynthetic === true ||
       (status.id === undefined && status.installationState !== undefined)
     ) {
-      this.#state = { ...this.#state, status: null, statusReceivedAtMs: null };
+      if (source === "stream") return;
+      const freshError =
+        this.#state.status?.state === "error" &&
+        this.#state.statusReceivedAtMs !== null &&
+        Date.now() - this.#state.statusReceivedAtMs <= this.#config.statusStaleAfterMs;
+      if (!freshError) {
+        this.#state = { ...this.#state, status: null, statusReceivedAtMs: null };
+      }
       this.#scheduleRender();
       return;
     }

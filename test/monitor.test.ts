@@ -261,6 +261,37 @@ describe("monitor lifecycle", () => {
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "RECORDING",
     ]);
+    monitor.updateStatus(inactive, Date.now(), "stream");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RECORDING",
+    ]);
+    await monitor.stop();
+  });
+
+  it("retains fresh runtime faults across synthetic polls without refreshing their age", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, frontRotationMs: 600_000 }, client);
+    monitor.updateStatus(status("error"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    const inactive: BoothStatus = {
+      state: "idle",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true,
+      installationState: "between_exhibitions",
+    };
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("ERROR");
+    await vi.advanceTimersByTimeAsync(20_000);
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("ERROR");
+    await vi.advanceTimersByTimeAsync(config.statusStaleAfterMs + 1);
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
     await monitor.stop();
   });
 
