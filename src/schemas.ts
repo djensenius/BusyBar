@@ -16,8 +16,11 @@ export const BoothStateSchema = z.enum([
 export type BoothState = z.infer<typeof BoothStateSchema>;
 
 const RuntimeModeSchema = z.enum(["real", "mock", "simulator"]);
+const InstallationStateSchema = z.enum(["active", "between_exhibitions"]);
 
 export const BoothStatusSchema = z.object({
+  installationState: InstallationStateSchema.optional(),
+  isSynthetic: z.boolean().optional(),
   state: BoothStateSchema,
   updatedAt: z.string().datetime(),
   currentQuestionId: z.string().nullable().optional(),
@@ -165,6 +168,7 @@ export const MonitorBreakdownTodaySchema = z.object({
 export type MonitorBreakdownToday = z.infer<typeof MonitorBreakdownTodaySchema>;
 
 export interface MonitorSummary {
+  installationState?: "active" | "between_exhibitions";
   interactionsToday?: number;
   messagesToday: number;
   interactionsTotal?: number;
@@ -178,6 +182,7 @@ export interface MonitorSummary {
 
 export const MonitorSummarySchema = z
   .object({
+    installationState: InstallationStateSchema.optional(),
     interactionsToday: z.number().int().nonnegative().optional(),
     callsToday: z.number().int().nonnegative().optional(),
     messagesToday: z.number().int().nonnegative(),
@@ -211,6 +216,9 @@ export const MonitorSummarySchema = z
     const messagePlaybackStartsTotal = summary.messagePlaybackStartsTotal;
     const breakdownToday = summary.breakdownToday;
     return {
+      ...(summary.installationState !== undefined
+        ? { installationState: summary.installationState }
+        : {}),
       ...(interactionsToday !== undefined
         ? {
             interactionsToday,

@@ -18,6 +18,24 @@ describe("Operator REST client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("preserves lifecycle on synthetic status instead of treating it as missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        response({
+          state: "idle",
+          updatedAt: "1970-01-01T00:00:00.000Z",
+          isSynthetic: true,
+          installationState: "between_exhibitions",
+        }),
+      ),
+    );
+    await expect(readStatus("https://operator.example.com", "token")).resolves.toMatchObject({
+      installationState: "between_exhibitions",
+      isSynthetic: true,
+    });
+  });
+
   it("returns persisted status snapshots and ignores the synthetic empty state", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

@@ -33,7 +33,7 @@ const fetchJson = async (url: URL, token: string): Promise<unknown> => {
 
 export const readStatus = async (apiUrl: string, token: string): Promise<BoothStatus | null> => {
   const status = BoothStatusSchema.parse(await fetchJson(new URL("/v1/status", apiUrl), token));
-  return status.id === undefined ? null : status;
+  return status.id === undefined && status.installationState === undefined ? null : status;
 };
 
 export const readSystem = async (

@@ -212,6 +212,41 @@ describe("monitor lifecycle", () => {
     vi.useRealTimers();
   });
 
+  it("accepts synthetic downtime after a newer heartbeat and resumes on explicit start", async () => {
+    const client = createClient();
+    const monitor = new Monitor({
+      ...config, frontRotationMs: 60_000, audioEnabled: true, alertSound: "alarm",
+    }, client);
+    monitor.updateStatus(status("recording"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    const inactive: BoothStatus = {
+      state: "idle",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true,
+      installationState: "between_exhibitions",
+    };
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "BETWEEN",
+    ]);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(20_000);
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+
+    monitor.updateStatus({ ...inactive, installationState: "active" });
+    monitor.updateSystem(system());
+    monitor.updateStatus({ ...status("recording"), id: 2 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RECORDING",
+    ]);
+    await monitor.stop();
+  });
+
   it("renders the latest active state", async () => {
     const client = createClient();
     const monitor = new Monitor(config, client);
@@ -233,6 +268,40 @@ describe("monitor lifecycle", () => {
       "DAY",
       "12",
     ]);
+    await monitor.stop();
+  });
+
+  it("keeps the clock carousel and appliance completions running during expected downtime", async () => {
+    const client = createClient();
+    const monitor = new Monitor({
+      ...config,
+      audioEnabled: true,
+      alertSound: "notification",
+      fluxHaus: {
+        url: "https://haus.example.com",
+        username: "demo",
+        password: "secret",
+        pollIntervalMs: 10_000,
+        staleAfterMs: 120_000,
+      },
+    }, client);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(48_250);
+    expect(client.draw.mock.calls.some(([payload]) =>
+      !frontTexts(payload as DisplayDrawParams).includes("BETWEEN"),
+    )).toBe(true);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER", "CYCLE", "DONE",
+    ]);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
     await monitor.stop();
   });
 

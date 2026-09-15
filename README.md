@@ -54,6 +54,17 @@ control how long each idle card remains visible.
 Live booth activity interrupts the carousel immediately with `CALLING`, `PLAYING`,
 `RECORDING`, or `SENDING`. Warnings and faults remain pinned until recovery.
 
+When the Operator explicitly reports `installationState: "between_exhibitions"`,
+offline is expected. Telephone cards show a neutral `BETWEEN` label and the rear
+overview explains that the next exhibition must be started in the Operator
+console. Clock, weather, and smart-home cards continue normally. Missing or stale
+booth telemetry does not sound an offline alarm during confirmed downtime.
+Lifecycle is reconciled by status polling even when the API returns a synthetic,
+id-less status; that response never counts as a fresh booth heartbeat.
+If lifecycle confirmation itself becomes stale, normal offline alarms return.
+Older servers that omit the field retain existing behavior. BUSY Cloud/device
+failures and fresh critical hardware readings are still reported.
+
 Pickup, message, breakout, and active-state cards use Canadian
 telephone-booth pixel art.
 The four hardware cards use the same booth art. The fan card maps commanded PWM
