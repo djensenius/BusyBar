@@ -218,8 +218,10 @@ describe("monitor lifecycle", () => {
       ...config, frontRotationMs: 60_000, audioEnabled: true, alertSound: "alarm",
     }, client);
     monitor.updateStatus(status("recording"));
+    const delayed = { ...status("recording"), id: 2, installationState: "active" as const };
     monitor.updateSystem(system());
     await monitor.start();
+    await vi.advanceTimersByTimeAsync(1_000);
     const inactive: BoothStatus = {
       state: "idle",
       updatedAt: "1970-01-01T00:00:00.000Z",
@@ -233,7 +235,7 @@ describe("monitor lifecycle", () => {
     ]);
     expect(client.playStockSound).not.toHaveBeenCalled();
     monitor.updateStatus(
-      { ...status("recording"), installationState: "active" },
+      delayed,
       Date.now(),
       "stream",
     );
@@ -249,6 +251,11 @@ describe("monitor lifecycle", () => {
 
     monitor.updateStatus({ ...inactive, installationState: "active" });
     monitor.updateSystem(system());
+    monitor.updateStatus(delayed, Date.now(), "stream");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "RECORDING",
+    );
     monitor.updateStatus({ ...status("recording"), id: 2 });
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([

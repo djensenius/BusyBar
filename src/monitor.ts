@@ -175,6 +175,7 @@ export class Monitor {
   #statusSourceId: number | null = null;
   #statusSourceRepeatCount: number | null = null;
   #statusSourceSignature: string | null = null;
+  #statusLifecycleBoundaryAtMs: number | null = null;
   #systemSourceAtMs: number | null = null;
   #systemSourceSignature: string | null = null;
   #routerTelemetrySourceAtMs: number | null = null;
@@ -277,6 +278,12 @@ export class Monitor {
     // Only the non-overlapping REST polls own lifecycle. Delayed stream frames
     // cannot undo a newer end, even if they carry an old active marker.
     if (source === "poll") {
+      if (
+        status.installationState === "between_exhibitions" &&
+        this.#state.installationState !== "between_exhibitions"
+      ) {
+        this.#statusLifecycleBoundaryAtMs = Math.min(receivedAtMs, Date.now());
+      }
       this.#state = {
         ...this.#state,
         installationState: status.installationState,
@@ -289,10 +296,6 @@ export class Monitor {
       (status.id === undefined && status.installationState !== undefined)
     ) {
       this.#state = { ...this.#state, status: null, statusReceivedAtMs: null };
-      this.#statusSourceAtMs = null;
-      this.#statusSourceId = null;
-      this.#statusSourceRepeatCount = null;
-      this.#statusSourceSignature = null;
       this.#scheduleRender();
       return;
     }
@@ -302,6 +305,15 @@ export class Monitor {
       receivedAtMs,
       Date.now(),
     );
+    if (
+      (this.#statusLifecycleBoundaryAtMs !== null &&
+        sourceAtMs < this.#statusLifecycleBoundaryAtMs) ||
+      (source === "stream" &&
+        this.#state.installationState === "between_exhibitions" &&
+        status.state !== "error")
+    ) {
+      return;
+    }
     const sourceId = status.id ?? null;
     const sourceRepeatCount = status.repeatCount ?? null;
     const sourceSignature = JSON.stringify(status);
