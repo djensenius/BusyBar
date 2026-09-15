@@ -33,7 +33,7 @@ const fetchJson = async (url: URL, token: string): Promise<unknown> => {
 
 export const readStatus = async (apiUrl: string, token: string): Promise<BoothStatus | null> => {
   const status = BoothStatusSchema.parse(await fetchJson(new URL("/v1/status", apiUrl), token));
-  return status.id === undefined ? null : status;
+  return status.id === undefined && status.installationState === undefined ? null : status;
 };
 
 export const readSystem = async (
@@ -81,7 +81,8 @@ export interface OperatorFeedHandle {
 }
 
 export interface OperatorMonitor {
-  updateStatus(status: BoothStatus, receivedAtMs?: number): void;
+  updateOperatorFeedHealth(feed: "status" | "system" | "router", healthy: boolean): void;
+  updateStatus(status: BoothStatus, receivedAtMs?: number, source?: "poll" | "stream"): void;
   updateSystem(system: BoothSystemSnapshotEnvelope, receivedAtMs?: number): void;
   updateRouterTelemetry(router: RouterTelemetryEnvelope, receivedAtMs?: number): void;
   updateSummary(summary: MonitorSummary): void;
@@ -126,7 +127,7 @@ export const startOperatorStream = (
       const parsed = WsEnvelopeSchema.safeParse(raw);
       if (!parsed.success) return;
       if (parsed.data.kind === "status") {
-        monitor.updateStatus(parsed.data.status);
+        monitor.updateStatus(parsed.data.status, Date.now(), "stream");
       } else if (parsed.data.boothId === boothId) {
         monitor.updateSystem({
           boothId: parsed.data.boothId,
@@ -179,23 +180,29 @@ export const startOperatorPolling = (
     await Promise.all([
       readStatus(apiUrl, token)
         .then((status) => {
+          if (!stopped) monitor.updateOperatorFeedHealth("status", true);
           if (status && !stopped) monitor.updateStatus(status);
         })
         .catch((error: unknown) => {
+          if (!stopped) monitor.updateOperatorFeedHealth("status", false);
           log.warn({ err: error }, "Operator status poll failed");
         }),
       readSystem(apiUrl, token, boothId)
         .then((system) => {
+          if (!stopped) monitor.updateOperatorFeedHealth("system", true);
           if (system && !stopped) monitor.updateSystem(system);
         })
         .catch((error: unknown) => {
+          if (!stopped) monitor.updateOperatorFeedHealth("system", false);
           log.warn({ err: error }, "Operator system poll failed");
         }),
       readRouterTelemetry(apiUrl, token, boothId)
         .then((router) => {
+          if (!stopped) monitor.updateOperatorFeedHealth("router", true);
           if (router && !stopped) monitor.updateRouterTelemetry(router);
         })
         .catch((error: unknown) => {
+          if (!stopped) monitor.updateOperatorFeedHealth("router", false);
           log.warn({ err: error }, "Operator router telemetry poll failed");
         }),
     ]);

@@ -16,7 +16,12 @@ import type {
   MonitorState,
   SceneAnnouncement,
 } from "./renderer.js";
-import { availableFrontFrames, DEFAULT_FRONT_FRAME, renderMonitor } from "./renderer.js";
+import {
+  availableFrontFrames,
+  DEFAULT_FRONT_FRAME,
+  isBetweenExhibitions,
+  renderMonitor,
+} from "./renderer.js";
 import type {
   BoothStatus,
   BoothSystemSnapshotEnvelope,
@@ -170,6 +175,8 @@ export class Monitor {
   #statusSourceId: number | null = null;
   #statusSourceRepeatCount: number | null = null;
   #statusSourceSignature: string | null = null;
+  #statusLifecycleBoundaryAtMs: number | null = null;
+  readonly #failedOperatorFeeds = new Set<"status" | "system" | "router">();
   #systemSourceAtMs: number | null = null;
   #systemSourceSignature: string | null = null;
   #routerTelemetrySourceAtMs: number | null = null;
@@ -235,7 +242,10 @@ export class Monitor {
     }, 5_000);
     this.#freshnessTimer.unref();
     this.#rotationTimer = setInterval(() => {
-      if (this.#state.status?.state !== "idle" || this.#state.completionAlert) return;
+      if (
+        (this.#state.status?.state !== "idle" && !isBetweenExhibitions(this.#state, this.#config, Date.now())) ||
+        this.#state.completionAlert
+      ) return;
       const frames = availableFrontFrames(this.#state, this.#config, Date.now());
       const next = nextFrontFrame(this.#state.frontFrame, frames, this.#frontFrameIndex);
       this.#frontFrameIndex = next.index;
@@ -259,13 +269,66 @@ export class Monitor {
     log.info("BUSY Bar monitor started");
   }
 
-  updateStatus(status: BoothStatus, receivedAtMs = Date.now()): void {
+  updateOperatorFeedHealth(feed: "status" | "system" | "router", healthy: boolean): void {
+    if (healthy) this.#failedOperatorFeeds.delete(feed);
+    else this.#failedOperatorFeeds.add(feed);
+    this.#state = { ...this.#state, operatorApiError: this.#failedOperatorFeeds.size > 0 };
+    this.#scheduleRender();
+  }
+
+  updateStatus(
+    status: BoothStatus,
+    receivedAtMs = Date.now(),
+    source: "poll" | "stream" = "poll",
+  ): void {
+    // Lifecycle is operator-controlled, not ordered by the booth timestamp.
+    // A synthetic epoch response can end a recently observed active call.
+    // Only the non-overlapping REST polls own lifecycle. Delayed stream frames
+    // cannot undo a newer end, even if they carry an old active marker.
+    if (source === "poll") {
+      if (
+        status.installationState === "between_exhibitions" &&
+        this.#state.installationState !== "between_exhibitions"
+      ) {
+        this.#statusLifecycleBoundaryAtMs = Math.min(receivedAtMs, Date.now());
+      }
+      this.#state = {
+        ...this.#state,
+        installationState: status.installationState,
+        installationStateReceivedAtMs: Math.min(receivedAtMs, Date.now()),
+      };
+      this.#scheduleRender();
+    }
+    if (
+      status.isSynthetic === true ||
+      (status.id === undefined && status.installationState !== undefined)
+    ) {
+      if (source === "stream") return;
+      const freshError =
+        this.#state.status?.state === "error" &&
+        this.#state.statusReceivedAtMs !== null &&
+        Date.now() - this.#state.statusReceivedAtMs <= this.#config.statusStaleAfterMs;
+      if (!freshError) {
+        this.#state = { ...this.#state, status: null, statusReceivedAtMs: null };
+      }
+      this.#scheduleRender();
+      return;
+    }
     const reportedAtMs = Date.parse(status.updatedAt);
     const sourceAtMs = Math.min(
       Number.isFinite(reportedAtMs) ? reportedAtMs : receivedAtMs,
       receivedAtMs,
       Date.now(),
     );
+    if (
+      (this.#statusLifecycleBoundaryAtMs !== null &&
+        sourceAtMs < this.#statusLifecycleBoundaryAtMs) ||
+      (source === "stream" &&
+        this.#state.installationState === "between_exhibitions" &&
+        status.state !== "error")
+    ) {
+      return;
+    }
     const sourceId = status.id ?? null;
     const sourceRepeatCount = status.repeatCount ?? null;
     const sourceSignature = JSON.stringify(status);
@@ -464,20 +527,12 @@ export class Monitor {
     ) {
       this.#completionQueue.shift();
     }
-    if (
-      this.#state.status?.state !== "idle" ||
-      aggregateSystemHealthSeverity(this.#state.system?.snapshot) !== "ok" ||
-      this.#state.statusReceivedAtMs === null ||
-      now - this.#state.statusReceivedAtMs > this.#config.statusStaleAfterMs ||
-      this.#state.system === null ||
-      this.#state.systemReceivedAtMs === null ||
-      now - this.#state.systemReceivedAtMs > this.#config.systemStaleAfterMs ||
-      !this.#state.cloudConnected
-    ) {
+    const completionAlert = this.#completionQueue[0];
+    if (!completionAlert) return;
+    if (!renderMonitor({ ...this.#state, completionAlert }, this.#config, now).renderedCompletionAlert) {
       return;
     }
-    const completionAlert = this.#completionQueue.shift();
-    if (!completionAlert) return;
+    this.#completionQueue.shift();
     this.#state = { ...this.#state, completionAlert };
     this.#scheduleRender();
   }

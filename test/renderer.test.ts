@@ -321,6 +321,72 @@ const frontFillColors = (payload: DisplayDrawParams): string[] =>
   );
 
 describe("monitor renderer", () => {
+  it("renders expected downtime without an offline alarm or warning art", () => {
+    const rendered = renderMonitor(
+      model({
+        installationState: "between_exhibitions",
+        installationStateReceivedAtMs: now,
+        status: null,
+        statusReceivedAtMs: null,
+        system: null,
+        systemReceivedAtMs: null,
+      }),
+      config,
+      now,
+    );
+    expect(rendered.alertKind).toBeNull();
+    expect(textsFor(rendered.payload, "front")).toEqual(["BETWEEN"]);
+    expect(textsFor(rendered.payload, "back")).toContain("OFFLINE IS EXPECTED");
+    expect(rendered.payload.led_notification_color).toBeUndefined();
+  });
+
+  it("does not suppress offline alarms with stale or absent lifecycle confirmation", () => {
+    const state = model({
+      installationState: "between_exhibitions",
+      installationStateReceivedAtMs: now - config.statusStaleAfterMs - 1,
+      status: null,
+      statusReceivedAtMs: null,
+    });
+    expect(renderMonitor(state, config, now).alertKind).toBe("offline");
+    expect(renderMonitor({ ...state, installationState: "active" }, config, now).alertKind).toBe(
+      "offline",
+    );
+  });
+
+  it("preserves real device/cloud faults and non-booth idle cards between exhibitions", () => {
+    const state = model({
+      installationState: "between_exhibitions",
+      installationStateReceivedAtMs: now,
+    });
+    expect(renderMonitor({ ...state, cloudConnected: false }, config, now).alertKind).toBe(
+      "offline",
+    );
+    const errorState = { ...state, status: status("error") };
+    const error = renderMonitor(errorState, config, now);
+    expect(error.alertKind).toBe("error");
+    expect(textsFor(error.payload, "front")).toContain("ERROR");
+    expect(
+      renderMonitor(
+        { ...errorState, statusReceivedAtMs: now - config.statusStaleAfterMs - 1 },
+        config,
+        now,
+      ).alertKind,
+    ).toBeNull();
+    expect(
+      renderMonitor(
+        {
+          ...state,
+          system: { ...system, snapshot: { temperatureCelsius: 90 } },
+        },
+        config,
+        now,
+      ).alertKind,
+    ).toBe("critical");
+    expect(
+      textsFor(renderMonitor({ ...state, frontFrame: "clock" }, config, now).payload, "front"),
+    ).not.toContain("BETWEEN");
+  });
+
   it("renders pickup and message counters while healthy and idle", () => {
     expect(
       textsFor(

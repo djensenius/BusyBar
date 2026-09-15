@@ -212,6 +212,108 @@ describe("monitor lifecycle", () => {
     vi.useRealTimers();
   });
 
+  it("accepts synthetic downtime after a newer heartbeat and resumes on explicit start", async () => {
+    const client = createClient();
+    const monitor = new Monitor({
+      ...config, frontRotationMs: 60_000, audioEnabled: true, alertSound: "alarm",
+    }, client);
+    monitor.updateStatus(status("recording"));
+    const delayed = { ...status("recording"), id: 2, installationState: "active" as const };
+    monitor.updateSystem(system());
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const inactive: BoothStatus = {
+      state: "idle",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true,
+      installationState: "between_exhibitions",
+    };
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "BETWEEN",
+    ]);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    monitor.updateStatus(
+      delayed,
+      Date.now(),
+      "stream",
+    );
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "BETWEEN",
+    ]);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(20_000);
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+
+    monitor.updateStatus({ ...inactive, installationState: "active" });
+    monitor.updateSystem(system());
+    monitor.updateStatus(delayed, Date.now(), "stream");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).not.toContain(
+      "RECORDING",
+    );
+    monitor.updateStatus({ ...status("recording"), id: 2 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RECORDING",
+    ]);
+    monitor.updateStatus(inactive, Date.now(), "stream");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RECORDING",
+    ]);
+    await monitor.stop();
+  });
+
+  it("retains fresh runtime faults across synthetic polls without refreshing their age", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, frontRotationMs: 600_000 }, client);
+    monitor.updateStatus(status("error"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    const inactive: BoothStatus = {
+      state: "idle",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true,
+      installationState: "between_exhibitions",
+    };
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("ERROR");
+    await vi.advanceTimersByTimeAsync(20_000);
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("ERROR");
+    await vi.advanceTimersByTimeAsync(config.statusStaleAfterMs + 1);
+    monitor.updateStatus(inactive);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
+    await monitor.stop();
+  });
+
+  it("does not mask API failures with expected downtime or another feed's recovery", async () => {
+    const client = createClient();
+    const monitor = new Monitor(config, client);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    monitor.updateOperatorFeedHealth("system", false);
+    monitor.updateOperatorFeedHealth("status", false);
+    monitor.updateOperatorFeedHealth("system", true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toContain("API ERROR");
+    monitor.updateOperatorFeedHealth("status", true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
+    await monitor.stop();
+  });
+
   it("renders the latest active state", async () => {
     const client = createClient();
     const monitor = new Monitor(config, client);
@@ -233,6 +335,40 @@ describe("monitor lifecycle", () => {
       "DAY",
       "12",
     ]);
+    await monitor.stop();
+  });
+
+  it("keeps the clock carousel and appliance completions running during expected downtime", async () => {
+    const client = createClient();
+    const monitor = new Monitor({
+      ...config,
+      audioEnabled: true,
+      alertSound: "notification",
+      fluxHaus: {
+        url: "https://haus.example.com",
+        username: "demo",
+        password: "secret",
+        pollIntervalMs: 10_000,
+        staleAfterMs: 120_000,
+      },
+    }, client);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(48_250);
+    expect(client.draw.mock.calls.some(([payload]) =>
+      !frontTexts(payload as DisplayDrawParams).includes("BETWEEN"),
+    )).toBe(true);
+    expect(client.playStockSound).not.toHaveBeenCalled();
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ washer: false }));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER", "CYCLE", "DONE",
+    ]);
+    expect(client.playStockSound).toHaveBeenCalledOnce();
     await monitor.stop();
   });
 

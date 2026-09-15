@@ -75,6 +75,9 @@ export interface SmartHomeAction {
 }
 
 export interface MonitorState {
+  installationState?: BoothStatus["installationState"];
+  installationStateReceivedAtMs?: number;
+  operatorApiError?: boolean;
   status: BoothStatus | null;
   statusReceivedAtMs: number | null;
   system: BoothSystemSnapshotEnvelope | null;
@@ -174,6 +177,15 @@ interface HealthPresentation {
   readonly severity: SystemHealthSeverity;
   readonly offline: boolean;
 }
+
+export const isBetweenExhibitions = (
+  state: MonitorState,
+  config: Extract<MonitorConfig, { enabled: true }>,
+  nowMs: number,
+): boolean =>
+  state.installationState === "between_exhibitions" &&
+  state.installationStateReceivedAtMs !== undefined &&
+  nowMs - state.installationStateReceivedAtMs <= config.statusStaleAfterMs;
 
 const sanitize = (input: string, maximum: number): string =>
   input
@@ -883,6 +895,17 @@ const backLines = (
   const system = state.system;
   const snapshot = system?.snapshot;
   if (state.backPage === 0) {
+    if (isBetweenExhibitions(state, config, nowMs)) {
+      return [
+        "BETWEEN EXHIBITIONS",
+        state.operatorApiError ? "OPERATOR API ERROR" : "OFFLINE IS EXPECTED",
+        "CALLS PAUSED",
+        "START NEXT EXHIBITION",
+        "IN OPERATOR CONSOLE",
+        `VIEW ${state.idleMode.toUpperCase()}`,
+        `BUSY CLOUD ${state.cloudConnected ? "UP" : "DOWN"}`,
+      ];
+    }
     const age = status ? `${Math.round(ageMs(state.statusReceivedAtMs, nowMs) / 1000)}s` : "--";
     const today = state.summary
       ? `DAY ${PICKUP_REAR_LABEL} ${summaryCount(state.summary.interactionsToday)} MSGS ${summaryCount(state.summary.messagesToday)}`
@@ -1925,6 +1948,14 @@ const idlePresentation = (
   ) {
     return vitalPresentation(frame, state, dark);
   }
+  if (isBetweenExhibitions(state, config, nowMs)) {
+    return labelPresentation(
+      "BETWEEN",
+      [COLORS.slateDark, COLORS.slate],
+      boothArtElements("front-booth", "idle"),
+      44,
+    );
+  }
   return summaryPresentation(frame, state.summary, dark);
 };
 
@@ -1933,13 +1964,29 @@ export const renderMonitor = (
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): MonitorRender => {
-  const offline = statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs);
-  const boothState = state.status?.state;
-  const health = healthPresentation(state, nowMs, config.systemStaleAfterMs);
+  const betweenExhibitions = isBetweenExhibitions(state, config, nowMs);
+  const offline =
+    state.operatorApiError === true ||
+    (!betweenExhibitions &&
+      statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs));
+  const currentBoothError =
+    state.status?.state === "error" &&
+    !statusIsStale(state.statusReceivedAtMs, nowMs, config.statusStaleAfterMs);
+  const boothState = betweenExhibitions && !currentBoothError ? "idle" : state.status?.state;
+  const observedHealth = healthPresentation(state, nowMs, config.systemStaleAfterMs);
+  const health: HealthPresentation =
+    betweenExhibitions && observedHealth.offline && state.cloudConnected
+      ? { view: null, severity: "ok", offline: false }
+      : observedHealth;
   const renderedCompletionAlert =
     !offline && boothState === "idle" && !health.view ? state.completionAlert : null;
   const frontView: FrontPresentation = offline
-    ? warningPresentation("OFFLINE", [COLORS.redDark, COLORS.red], COLORS.red, COLORS.red)
+    ? warningPresentation(
+        state.operatorApiError ? "API ERROR" : "OFFLINE",
+        [COLORS.redDark, COLORS.red],
+        COLORS.red,
+        COLORS.red,
+      )
     : boothState && boothState !== "idle"
       ? statePresentation(boothState)
       : (health.view ??
