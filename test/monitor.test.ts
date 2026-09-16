@@ -494,6 +494,66 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("rotates from car to clock and weather during expected downtime", async () => {
+    vi.setSystemTime(new Date("2026-07-31T20:00:00.000Z"));
+    const client = createClient();
+    const monitor = new Monitor({
+      ...config,
+      weather: {
+        url: "https://homeassistant.example.com",
+        token: "ha-token",
+        entityId: "weather.patio",
+        sunEntityId: "sun.sun",
+        humidexEntityId: null,
+        windChillEntityId: null,
+        precipitationEntityId: null,
+        pollIntervalMs: 600_000,
+        staleAfterMs: 3_600_000,
+        timeZone: "America/Toronto",
+      },
+      fluxHaus: {
+        url: "https://haus.example.com",
+        username: "demo",
+        password: "secret",
+        pollIntervalMs: 10_000,
+        staleAfterMs: 120_000,
+      },
+    }, client);
+    const now = Date.now();
+    monitor.updateStatus({
+      state: "idle",
+      updatedAt: new Date(now).toISOString(),
+      isSynthetic: true,
+      installationState: "between_exhibitions",
+    }, now);
+    monitor.updateWeather(weather("above_horizon"), now);
+    monitor.updateFluxHaus({
+      ...fluxHausSnapshot({}),
+      generatedAt: new Date(now).toISOString(),
+      car: {
+        batteryPercent: 78,
+        evRangeKm: 356,
+        totalRangeKm: 356,
+        charging: false,
+        updatedAt: new Date(now - 12 * 60_000).toISOString(),
+      },
+    }, now);
+
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "CAR", "356 KM", "12M", "78%",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)[0]).toBe("16:00");
+
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)[0]).toBe("20");
+
+    await monitor.stop();
+  });
+
   it("suppresses startup completions and alerts once when equipment finishes", async () => {
     const client = createClient();
     const monitor = new Monitor(

@@ -36,8 +36,8 @@ gradient cards:
 - Fresh booth telemetry adds a four-step fan cooling meter and the Pi CPU temperature
 - Fresh router component telemetry adds battery charge and battery temperature
   cards
-- Fresh FluxHaus data adds the car battery, EV range, and compact last-update
-  age to the normal carousel
+- Fresh FluxHaus data adds the car battery, EV range, and a clock-marked
+  last-update age to the normal carousel
 - While FluxHaus equipment is active, the complete active group is inserted
   after every normal card in the full `all` mode. The group can include the
   washer, dryer, dishwasher, BroomBot, MopBot, and air purifier

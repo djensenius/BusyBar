@@ -281,14 +281,16 @@ const fluxHausDesigns = [
   {
     icon: "car",
     title: "CAR",
-    detail: "356KM",
+    detail: "356 KM",
+    freshness: "12M",
     value: "78%",
   },
   {
     icon: "car",
     title: "CAR",
-    detail: "78% 356KM",
-    value: "12M",
+    detail: "356 KM",
+    freshness: "12M",
+    value: "78%",
     dark: true,
   },
   {
@@ -1009,6 +1011,19 @@ const drawFluxHaus = (context, design) => {
   context.fillText(design.title, 21, 1);
   context.font = "bold 4px monospace";
   context.fillText(design.detail, 21, 10);
+  if (design.freshness) {
+    for (const [x, y, width, height] of [
+      [40, 10, 3, 1],
+      [39, 11, 1, 3],
+      [43, 11, 1, 3],
+      [40, 14, 3, 1],
+      [41, 11, 1, 2],
+      [42, 12, 1, 1],
+    ]) {
+      context.fillRect(x, y, width, height);
+    }
+    context.fillText(design.freshness, 45, 10);
+  }
 
   context.fillStyle = design.iconAccent;
   context.textAlign = "center";
