@@ -415,7 +415,7 @@ export const availableFrontFrames = (
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): FrontFrame[] => {
-  const betweenExhibitions = state.installationState === "between_exhibitions";
+  const betweenExhibitions = isBetweenExhibitions(state, config, nowMs);
   const systemFresh =
     state.system !== null && ageMs(state.systemReceivedAtMs, nowMs) <= config.systemStaleAfterMs;
   const snapshot = systemFresh ? state.system?.snapshot : null;

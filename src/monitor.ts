@@ -288,7 +288,9 @@ export class Monitor {
     if (source === "poll") {
       if (
         status.installationState !== undefined &&
-        status.installationState !== this.#state.installationState
+        status.installationState !== this.#state.installationState &&
+        (this.#state.installationState !== undefined ||
+          status.installationState === "between_exhibitions")
       ) {
         this.#state = { ...this.#state, summary: null };
         this.#summarySourceAtMs = Date.now();

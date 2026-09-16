@@ -338,6 +338,42 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("preserves a summary that arrives before the first active status poll", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateSummary({ ...summary(), installationState: "active" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "12",
+    ]);
+    await monitor.stop();
+  });
+
+  it("clears an early summary when the first status poll reports downtime", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateSummary({ ...summary(), installationState: "active" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "--",
+    ]);
+    await monitor.stop();
+  });
+
   it("drops the previous exhibition's totals until a fresh post-start summary arrives", async () => {
     const client = createClient();
     const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);

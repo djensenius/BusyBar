@@ -338,6 +338,21 @@ describe("monitor renderer", () => {
     expect(textsFor(rendered.payload, "front")).not.toContain("PICKUP");
   });
 
+  it("uses the same lifecycle freshness for rendering and frame selection", () => {
+    const state = model({
+      installationState: "between_exhibitions",
+      installationStateReceivedAtMs: now - config.statusStaleAfterMs - 1,
+      summary,
+      system: vitalsSystem,
+    });
+    const frames = availableFrontFrames(state, config, now);
+    expect(frames).toContain("interactionsTotal");
+    expect(frames).toContain("fanCooling");
+    expect(textsFor(renderMonitor(state, config, now).payload, "front")).toEqual([
+      "PICKUP", "DAY", "12",
+    ]);
+  });
+
   it("keeps appliances available without phone cards, clock, or weather", () => {
     const state = model({
       installationState: "between_exhibitions",

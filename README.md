@@ -264,8 +264,11 @@ The counter carousel requires Operator API support for
 this worker. Older Operator releases still provide state and health, but summary
 polls will log `404` until the endpoint is available.
 
-During the rolling additive analytics rollout, older summary payloads still
-drive the four core `PICKUP`/`MSGS` day and all-time pickup cards. Matching
-Operator releases automatically add the optional `LISTEN / ALL` card, the five
-daily breakout cards, and the rear overview breakout from the additive
-`interactions*` fields.
+Exhibition-only counters require an Operator release that scopes
+`GET /v1/monitor/summary` to the current exhibition and reports
+`installationState` in status responses. The worker does not re-scope totals
+returned by older servers; deploy that Operator support first.
+
+The four core `PICKUP`/`MSGS` cards show `DAY` and `EXH` counts. Optional summary
+fields add the `LISTEN / EXH` card, the five daily breakout cards, and the rear
+overview breakout from the additive `interactions*` fields.
