@@ -321,6 +321,38 @@ const frontFillColors = (payload: DisplayDrawParams): string[] =>
   );
 
 describe("monitor renderer", () => {
+  it.each(["all", "telephone"] as const)("omits telephone cards between exhibitions in %s mode", (idleMode) => {
+    const state = model({
+      idleMode,
+      installationState: "between_exhibitions",
+      installationStateReceivedAtMs: now,
+      summary,
+      system: vitalsSystem,
+      weather,
+      weatherReceivedAtMs: now,
+    });
+    expect(availableFrontFrames(state, weatherEnabledConfig, now)).toEqual(["clock", "weather"]);
+    const rendered = renderMonitor(state, weatherEnabledConfig, now);
+    expect(rendered.alertKind).toBeNull();
+    expect(textsFor(rendered.payload, "front")).not.toContain("BETWEEN");
+    expect(textsFor(rendered.payload, "front")).not.toContain("PICKUP");
+  });
+
+  it("keeps appliances available without phone cards, clock, or weather", () => {
+    const state = model({
+      installationState: "between_exhibitions",
+      installationStateReceivedAtMs: now,
+      fluxHaus: { ...fluxHaus, car: null },
+      fluxHausReceivedAtMs: now,
+      summary,
+    });
+    const withoutClock = { ...fluxHausEnabledConfig, clockEnabled: false };
+    expect(availableFrontFrames(state, withoutClock, now)).toEqual([
+      "fluxhausWasher", "fluxhausDryer",
+    ]);
+    expect(textsFor(renderMonitor(state, withoutClock, now).payload, "front")).toContain("WASHER");
+  });
+
   it("renders expected downtime without an offline alarm or warning art", () => {
     const rendered = renderMonitor(
       model({
@@ -331,7 +363,7 @@ describe("monitor renderer", () => {
         system: null,
         systemReceivedAtMs: null,
       }),
-      config,
+      { ...config, clockEnabled: false },
       now,
     );
     expect(rendered.alertKind).toBeNull();
@@ -405,13 +437,13 @@ describe("monitor renderer", () => {
         renderMonitor(model({ frontFrame: "interactionsTotal", summary }), config, now).payload,
         "front",
       ),
-    ).toEqual(["PICKUP", "ALL", "342"]);
+    ).toEqual(["PICKUP", "EXH", "342"]);
     expect(
       textsFor(
         renderMonitor(model({ frontFrame: "messagesTotal", summary }), config, now).payload,
         "front",
       ),
-    ).toEqual(["MSGS", "ALL", "187"]);
+    ).toEqual(["MSGS", "EXH", "187"]);
     expect(
       textsFor(
         renderMonitor(
@@ -421,7 +453,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["LISTEN", "ALL", "48"]);
+    ).toEqual(["LISTEN", "EXH", "48"]);
     expect(textsFor(renderMonitor(model(), config, now).payload, "front")).toEqual([
       "PICKUP",
       "DAY",
@@ -462,7 +494,7 @@ describe("monitor renderer", () => {
       config,
       now,
     ).payload;
-    expect(textsFor(sixDigitFront, "front")).toEqual(["PICKUP", "ALL", "123456"]);
+    expect(textsFor(sixDigitFront, "front")).toEqual(["PICKUP", "EXH", "123456"]);
     expect(
       frontTextElements(sixDigitFront).find((element) => element.text === "123456"),
     ).toMatchObject({
@@ -520,7 +552,7 @@ describe("monitor renderer", () => {
     expect(frontTextElements(rendered).find((element) => element.text === "LISTEN")).toMatchObject({
       font: "small",
     });
-    expect(textsFor(rendered, "front")).toEqual(["LISTEN", "ALL", "0"]);
+    expect(textsFor(rendered, "front")).toEqual(["LISTEN", "EXH", "0"]);
     expect(frontTextElements(rendered)).toHaveLength(5);
     expect(frontRectangleElements(rendered)).toHaveLength(24);
   });

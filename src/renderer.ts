@@ -118,12 +118,12 @@ const BASE_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
   "messagesTotal",
 ];
 
-const CORE_ALL_TIME_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
+const CORE_EXHIBITION_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
   "interactionsTotal",
   "messagesTotal",
 ];
 
-const OPTIONAL_ALL_TIME_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
+const OPTIONAL_EXHIBITION_TELEPHONE_FRAMES: readonly SummaryFrontFrame[] = [
   "messagePlaybackStartsTotal",
 ];
 
@@ -415,6 +415,7 @@ export const availableFrontFrames = (
   config: Extract<MonitorConfig, { enabled: true }>,
   nowMs: number,
 ): FrontFrame[] => {
+  const betweenExhibitions = state.installationState === "between_exhibitions";
   const systemFresh =
     state.system !== null && ageMs(state.systemReceivedAtMs, nowMs) <= config.systemStaleAfterMs;
   const snapshot = systemFresh ? state.system?.snapshot : null;
@@ -442,10 +443,10 @@ export const availableFrontFrames = (
         ...(state.summary.messagesToday === 0
           ? []
           : (["messagesToday"] satisfies SummaryFrontFrame[])),
-        ...CORE_ALL_TIME_TELEPHONE_FRAMES,
+        ...CORE_EXHIBITION_TELEPHONE_FRAMES,
         ...(state.summary.messagePlaybackStartsTotal === undefined
           ? []
-          : OPTIONAL_ALL_TIME_TELEPHONE_FRAMES),
+          : OPTIONAL_EXHIBITION_TELEPHONE_FRAMES),
         ...(state.summary.breakdownToday?.noSelection === 0
           ? []
           : state.summary.breakdownToday
@@ -473,7 +474,7 @@ export const availableFrontFrames = (
             : []),
       ]
     : [...BASE_TELEPHONE_FRAMES];
-  const telephoneFrames = [...summaryFrames, ...vitalFrames];
+  const telephoneFrames = betweenExhibitions ? [] : [...summaryFrames, ...vitalFrames];
   const fluxHausFresh =
     state.fluxHaus !== null &&
     config.fluxHaus !== null &&
@@ -499,6 +500,16 @@ export const availableFrontFrames = (
       state.weather &&
       ageMs(state.weatherReceivedAtMs, nowMs) <= config.weather.staleAfterMs,
   );
+  const normalFrames: FrontFrame[] = [
+    ...normalTelephoneFrames,
+    ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
+    ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
+  ];
+  const allFrames = normalFrames.length === 0
+    ? activeFluxHausFrames
+    : activeFluxHausFrames.length === 0
+      ? normalFrames
+      : normalFrames.flatMap((frame) => [frame, ...activeFluxHausFrames]);
   const selectedFrames =
     state.idleMode === "weather"
       ? weatherAvailable
@@ -513,19 +524,14 @@ export const availableFrontFrames = (
               ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
               ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
             ]
-          : state.idleMode === "telephone"
-                ? normalTelephoneFrames
-                : (() => {
-                    const normalFrames: FrontFrame[] = [
-                      ...normalTelephoneFrames,
-                      ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
-                      ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
-                    ];
-                    return activeFluxHausFrames.length === 0
-                      ? normalFrames
-                      : normalFrames.flatMap((frame) => [frame, ...activeFluxHausFrames]);
-                  })();
-  return selectedFrames.length > 0 ? selectedFrames : normalTelephoneFrames;
+          : state.idleMode === "telephone" && !betweenExhibitions
+            ? normalTelephoneFrames
+            : allFrames;
+  return selectedFrames.length > 0
+    ? selectedFrames
+    : betweenExhibitions
+      ? allFrames
+      : normalTelephoneFrames;
 };
 
 const healthPresentation = (
@@ -1025,13 +1031,13 @@ const summaryLabelFont = (label: string): TextElement["font"] =>
 
 const summaryCard = (
   label: string,
-  period: "DAY" | "ALL",
+  period: "DAY" | "EXH",
   rawCount: number | undefined,
   background: Gradient,
   accent: string,
 ): {
   label: string;
-  period: "DAY" | "ALL";
+  period: "DAY" | "EXH";
   count: string;
   background: Gradient;
   accent: string;
@@ -1048,7 +1054,7 @@ const summaryFrameCard = (
   summary: MonitorSummary | null,
 ): {
   label: string;
-  period: "DAY" | "ALL";
+  period: "DAY" | "EXH";
   count: string;
   background: Gradient;
   accent: string;
@@ -1073,7 +1079,7 @@ const summaryFrameCard = (
     case "interactionsTotal":
       return summaryCard(
         PICKUP_FRONT_LABEL,
-        "ALL",
+        "EXH",
         summary?.interactionsTotal,
         [COLORS.blueDark, COLORS.cyanDark],
         COLORS.cyan,
@@ -1081,7 +1087,7 @@ const summaryFrameCard = (
     case "messagesTotal":
       return summaryCard(
         "MSGS",
-        "ALL",
+        "EXH",
         summary?.messagesTotal,
         [COLORS.violetDark, COLORS.violet],
         COLORS.violet,
@@ -1089,7 +1095,7 @@ const summaryFrameCard = (
     case "messagePlaybackStartsTotal":
       return summaryCard(
         "LISTEN",
-        "ALL",
+        "EXH",
         summary?.messagePlaybackStartsTotal,
         [COLORS.blueDark, COLORS.cyanDark],
         COLORS.cyan,
