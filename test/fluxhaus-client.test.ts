@@ -152,9 +152,10 @@ describe("FluxHaus client", () => {
           name: "Air purifier",
           active: true,
           lifecycle: "active",
-          status: "Running",
-          detail: "auto PM8",
+          status: "auto",
+          detail: null,
           progressPercent: 42,
+          airQualityPm25: 8,
           remainingSeconds: null,
           elapsedSeconds: null,
           batteryPercent: null,
@@ -290,6 +291,7 @@ describe("FluxHaus client", () => {
       active: true,
       lifecycle: "active",
       status: "Running",
+      airQualityPm25: null,
     });
   });
 

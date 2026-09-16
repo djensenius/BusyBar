@@ -542,10 +542,15 @@ describe("monitor lifecycle", () => {
     await monitor.start();
     await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
-      "CAR", "356 KM", "12M", "78%",
+      "RANGE", "356 KM", "78%",
     ]);
 
-    await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs / 2 + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "UPDATED", "12M AGO", "78%",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs / 2 + config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)[0]).toBe("16:00");
 
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);

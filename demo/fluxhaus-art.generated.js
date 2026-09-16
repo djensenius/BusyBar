@@ -507,84 +507,84 @@ globalThis.FLUX_HAUS_ART = {
         "y": 1,
         "width": 8,
         "height": 1,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 5,
         "y": 14,
         "width": 8,
         "height": 1,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 5,
         "y": 2,
         "width": 1,
         "height": 12,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 12,
         "y": 2,
         "width": 1,
         "height": 12,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 8,
         "y": 4,
         "width": 2,
         "height": 2,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 7,
         "y": 6,
         "width": 1,
         "height": 2,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 10,
         "y": 6,
         "width": 1,
         "height": 2,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 8,
         "y": 8,
         "width": 2,
         "height": 2,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 7,
         "y": 12,
         "width": 4,
         "height": 1,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 15,
         "y": 4,
         "width": 2,
         "height": 1,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 14,
         "y": 7,
         "width": 3,
         "height": 1,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       },
       {
         "x": 15,
         "y": 10,
         "width": 2,
         "height": 1,
-        "color": "#94A3B8FF"
+        "color": "#D9EFFFFF"
       }
     ],
     "car": [
@@ -766,55 +766,48 @@ globalThis.FLUX_HAUS_ART = {
         "#003B7AFF",
         "#006A85FF"
       ],
-      "accent": "#173E4AFF",
       "icon": "#72DCFFFF"
     },
     "dryer": {
       "background": [
-        "#78350FFF",
-        "#C65D08FF"
+        "#865B00FF",
+        "#FAAB00FF"
       ],
-      "accent": "#4D2A0AFF",
       "icon": "#FF9F32FF"
     },
     "dishwasher": {
       "background": [
-        "#003B7AFF",
-        "#245F79FF"
+        "#101827FF",
+        "#003B7AFF"
       ],
-      "accent": "#173446FF",
       "icon": "#7DD3FCFF"
     },
     "broombot": {
       "background": [
         "#14532DFF",
-        "#23894AFF"
+        "#30D158FF"
       ],
-      "accent": "#173B25FF",
       "icon": "#73E895FF"
     },
     "mopbot": {
       "background": [
-        "#075985FF",
-        "#0F766EFF"
+        "#003B7AFF",
+        "#006A85FF"
       ],
-      "accent": "#123D3AFF",
       "icon": "#5EEAD4FF"
     },
     "airPurifier": {
       "background": [
-        "#101827FF",
+        "#4C1D95FF",
         "#34445CFF"
       ],
-      "accent": "#273449FF",
-      "icon": "#94A3B8FF"
+      "icon": "#D9EFFFFF"
     },
     "car": {
       "background": [
-        "#3F3F46FF",
-        "#71717AFF"
+        "#101827FF",
+        "#865B00FF"
       ],
-      "accent": "#453D16FF",
       "icon": "#FACC15FF"
     },
     "complete": {
@@ -822,7 +815,6 @@ globalThis.FLUX_HAUS_ART = {
         "#14532DFF",
         "#30D158FF"
       ],
-      "accent": "#173B25FF",
       "icon": "#86EFACFF"
     }
   }

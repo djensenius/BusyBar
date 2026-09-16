@@ -646,7 +646,7 @@ describe("monitor renderer", () => {
     ).toEqual(["16:00", "FRI", "JUL 31"]);
   });
 
-  it("renders FluxHaus equipment and car cards", () => {
+  it("renders FluxHaus equipment and paired car cards", () => {
     expect(
       textsFor(
         renderMonitor(
@@ -661,11 +661,27 @@ describe("monitor renderer", () => {
         "front",
       ),
     ).toEqual(["WASHER", "RINSE", "38M"]);
+    const carRangePayload = renderMonitor(
+      model({
+        frontFrame: "carRange",
+        fluxHaus,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    ).payload;
+    expect(textsFor(carRangePayload, "front")).toEqual(["RANGE", "356 KM", "78%"]);
+    expect(
+      frontTextElements(carRangePayload).find((element) => element.text === "78%"),
+    ).toMatchObject({
+      font: "condensed",
+      width: 19,
+    });
     expect(
       textsFor(
         renderMonitor(
           model({
-            frontFrame: "carBattery",
+            frontFrame: "carUpdated",
             fluxHaus,
             fluxHausReceivedAtMs: now - 1_000,
           }),
@@ -674,7 +690,48 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["CAR", "356 KM", "12M", "78%"]);
+    ).toEqual(["UPDATED", "12M AGO", "78%"]);
+  });
+
+  it("labels the purifier mode and PM2.5 reading without repeating fan speed", () => {
+    const purifierSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "airPurifier",
+          name: "Air purifier",
+          active: true,
+          lifecycle: "active",
+          status: "auto",
+          detail: null,
+          progressPercent: 42,
+          airQualityPm25: 8,
+          remainingSeconds: null,
+          elapsedSeconds: null,
+          batteryPercent: null,
+          updatedAt: new Date(now - 1_000).toISOString(),
+        },
+      ],
+    };
+    const payload = renderMonitor(
+      model({
+        frontFrame: "fluxhausAirPurifier",
+        fluxHaus: purifierSnapshot,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    ).payload;
+
+    expect(textsFor(payload, "front")).toEqual(["PURIFIER", "AUTO", "PM25", "8"]);
+    expect(frontTextElements(payload).find((element) => element.text === "PURIFIER")).toMatchObject({
+      font: "tiny",
+      width: 32,
+    });
+    expect(frontTextElements(payload).find((element) => element.text === "8")).toMatchObject({
+      font: "large",
+      width: 19,
+    });
   });
 
   it("renders robot elapsed time when battery is unavailable", () => {
@@ -740,7 +797,7 @@ describe("monitor renderer", () => {
       "AUTOMATIC DELICATE",
       "99H+",
     ]);
-    expect(visibleTexts.map((element) => element.width)).toEqual([31, 31, 15]);
+    expect(visibleTexts.map((element) => element.width)).toEqual([32, 32, 19]);
   });
 
   it("repeats the active FluxHaus group after every normal frame in all mode", () => {
@@ -764,7 +821,13 @@ describe("monitor renderer", () => {
       "fluxhausWasher",
       "fluxhausDryer",
     ]);
-    expect(frames).toContain("carBattery");
+    const carRangeIndex = frames.indexOf("carRange");
+    expect(frames.slice(carRangeIndex, carRangeIndex + 4)).toEqual([
+      "carRange",
+      "carUpdated",
+      "fluxhausWasher",
+      "fluxhausDryer",
+    ]);
     expect(
       availableFrontFrames(
         model({
@@ -783,7 +846,8 @@ describe("monitor renderer", () => {
       "messagesToday",
       "interactionsTotal",
       "messagesTotal",
-      "carBattery",
+      "carRange",
+      "carUpdated",
     ]);
   });
 
@@ -798,7 +862,7 @@ describe("monitor renderer", () => {
         fluxHausEnabledConfig,
         now,
       ),
-    ).not.toContain("carBattery");
+    ).toEqual(expect.not.arrayContaining(["carRange", "carUpdated"]));
 
     expect(
       textsFor(

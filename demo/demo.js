@@ -267,29 +267,42 @@ const fluxHausDesigns = [
   },
   {
     icon: "airPurifier",
-    title: "AIR",
-    detail: "AUTO PM8",
-    value: "42%",
+    title: "PURIFIER",
+    detail: "AUTO",
+    valueLabel: "PM25",
+    value: "8",
   },
   {
     icon: "airPurifier",
-    title: "AIR",
-    detail: "NIGHT PM4",
-    value: "18%",
+    title: "PURIFIER",
+    detail: "NIGHT",
+    valueLabel: "PM25",
+    value: "4",
     dark: true,
   },
   {
     icon: "car",
-    title: "CAR",
+    title: "RANGE",
     detail: "356 KM",
-    freshness: "12M",
     value: "78%",
   },
   {
     icon: "car",
-    title: "CAR",
+    title: "RANGE",
     detail: "356 KM",
-    freshness: "12M",
+    value: "78%",
+    dark: true,
+  },
+  {
+    icon: "car",
+    title: "UPDATED",
+    detail: "12M AGO",
+    value: "78%",
+  },
+  {
+    icon: "car",
+    title: "UPDATED",
+    detail: "12M AGO",
     value: "78%",
     dark: true,
   },
@@ -315,7 +328,6 @@ const fluxHausDesigns = [
     ...design,
     start: palette.background[0],
     end: palette.background[1],
-    accent: palette.accent,
     iconAccent: palette.icon,
     concept: Math.floor(index / 2) + 1,
   };
@@ -999,37 +1011,38 @@ const drawFluxHaus = (context, design) => {
   context.fillRect(0, 0, 72, 16);
   drawFluxHausIcon(context, design.icon);
 
-  context.fillStyle = design.dark ? design.accent : "#05070ccc";
-  context.fillRect(54, 1, 17, 14);
+  context.fillStyle = design.dark ? "#000000" : "#05070ccc";
+  context.fillRect(53, 0, 19, 16);
   context.fillStyle = design.iconAccent;
-  context.fillRect(54, 14, 17, 1);
 
   context.fillStyle = design.dark ? design.iconAccent : COLORS.white;
   context.textAlign = "left";
   context.textBaseline = "top";
-  context.font = `bold ${design.title.length > 6 ? 5 : 7}px monospace`;
-  context.fillText(design.title, 21, 1);
+  context.font =
+    `bold ${design.title.length > 6 ? 4 : design.title.length > 5 ? 6 : 7}px monospace`;
+  context.fillText(design.title, 20, 1);
   context.font = "bold 4px monospace";
-  context.fillText(design.detail, 21, 10);
-  if (design.freshness) {
-    for (const [x, y, width, height] of [
-      [40, 10, 3, 1],
-      [39, 11, 1, 3],
-      [43, 11, 1, 3],
-      [40, 14, 3, 1],
-      [41, 11, 1, 2],
-      [42, 12, 1, 1],
-    ]) {
-      context.fillRect(x, y, width, height);
-    }
-    context.fillText(design.freshness, 45, 10);
-  }
+  context.fillText(design.detail, 20, 10);
 
   context.fillStyle = design.iconAccent;
   context.textAlign = "center";
+  if (design.valueLabel) {
+    context.textBaseline = "top";
+    context.font = "bold 4px monospace";
+    context.fillText(design.valueLabel, 62.5, 1);
+  }
   context.textBaseline = "middle";
-  context.font = `bold ${design.value.length > 3 ? 5 : 7}px monospace`;
-  context.fillText(design.value, 62.5, 7.5);
+  context.font =
+    `bold ${
+      design.value.length > 4
+        ? 4
+        : design.value.length > 3
+          ? 6
+          : design.value.length > 2
+            ? 7
+            : 9
+    }px monospace`;
+  context.fillText(design.value, 62.5, design.valueLabel ? 10 : 8);
 };
 
 const render = (canvas, design, blink) => {
