@@ -374,6 +374,33 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("invalidates cached totals when a newer summary reports downtime before status polling", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    const previous = { ...summary(), installationState: "active" as const };
+    monitor.updateSummary(previous);
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const downtime = { ...summary(), installationState: "between_exhibitions" as const };
+    monitor.updateSummary(downtime);
+    monitor.updateSummary(previous);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "--",
+    ]);
+    monitor.updateSummary({
+      ...summary(), installationState: "active", interactionsToday: 3, interactionsTotal: 3,
+    });
+    monitor.updateSummary(downtime);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "3",
+    ]);
+    await monitor.stop();
+  });
+
   it("drops the previous exhibition's totals until a fresh post-start summary arrives", async () => {
     const client = createClient();
     const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
