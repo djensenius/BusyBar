@@ -674,7 +674,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["CAR", "356KM 12M", "78%"]);
+    ).toEqual(["CAR", "356 KM", "12M", "78%"]);
   });
 
   it("renders robot elapsed time when battery is unavailable", () => {

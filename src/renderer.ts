@@ -1484,52 +1484,80 @@ const fluxHausCard = (
   value: string,
   palette: ReturnType<typeof fluxHausPalette>,
   dark: boolean,
-  indicator?: string,
-): FrontPresentation => ({
-  elements: [
-    frontBackground(dark ? [COLORS.trueBlack, COLORS.trueBlack] : palette.background),
-    ...fluxHausIconElements("front-fluxhaus", icon, palette.icon),
-    frontRectangle(
-      "front-fluxhaus-badge",
-      54,
-      1,
-      17,
-      14,
-      dark ? palette.accent : "#05070CCC",
-    ),
-    frontText(
-      "front-fluxhaus-title",
-      title,
-      21,
-      1,
-      title.length > 6 ? "tiny" : "small",
-      dark ? palette.icon : COLORS.white,
-      "top_left",
-      31,
-    ),
-    frontText(
-      "front-fluxhaus-detail",
-      detail,
-      21,
-      10,
-      "tiny",
-      dark ? palette.icon : COLORS.white,
-      "top_left",
-      31,
-    ),
-    frontText(
-      "front-fluxhaus-value",
-      value,
-      62,
-      8,
-      value.length > 3 ? "tiny" : "small",
-      palette.icon,
-      "center",
-      15,
-    ),
-  ],
-  ...(indicator ? { indicator } : {}),
-});
+  options: {
+    indicator?: string;
+    freshness?: string;
+  } = {},
+): FrontPresentation => {
+  const textColor = dark ? palette.icon : COLORS.white;
+  const freshnessElements: DisplayElement[] = options.freshness
+    ? [
+        frontRectangle("front-fluxhaus-age-top", 40, 10, 3, 1, textColor),
+        frontRectangle("front-fluxhaus-age-left", 39, 11, 1, 3, textColor),
+        frontRectangle("front-fluxhaus-age-right", 43, 11, 1, 3, textColor),
+        frontRectangle("front-fluxhaus-age-bottom", 40, 14, 3, 1, textColor),
+        frontRectangle("front-fluxhaus-age-hand-v", 41, 11, 1, 2, textColor),
+        frontRectangle("front-fluxhaus-age-hand-h", 42, 12, 1, 1, textColor),
+        frontText(
+          "front-fluxhaus-freshness",
+          options.freshness,
+          45,
+          10,
+          "tiny",
+          textColor,
+          "top_left",
+          8,
+        ),
+      ]
+    : [];
+
+  return {
+    elements: [
+      frontBackground(dark ? [COLORS.trueBlack, COLORS.trueBlack] : palette.background),
+      ...fluxHausIconElements("front-fluxhaus", icon, palette.icon),
+      frontRectangle(
+        "front-fluxhaus-badge",
+        54,
+        1,
+        17,
+        14,
+        dark ? palette.accent : "#05070CCC",
+      ),
+      frontText(
+        "front-fluxhaus-title",
+        title,
+        21,
+        1,
+        title.length > 6 ? "tiny" : "small",
+        textColor,
+        "top_left",
+        31,
+      ),
+      frontText(
+        "front-fluxhaus-detail",
+        detail,
+        21,
+        10,
+        "tiny",
+        textColor,
+        "top_left",
+        options.freshness ? 17 : 31,
+      ),
+      ...freshnessElements,
+      frontText(
+        "front-fluxhaus-value",
+        value,
+        62,
+        8,
+        value.length > 3 ? "tiny" : "small",
+        palette.icon,
+        "center",
+        15,
+      ),
+    ],
+    ...(options.indicator ? { indicator: options.indicator } : {}),
+  };
+};
 
 const fluxHausPresentation = (
   frame: FrontFrame,
@@ -1540,9 +1568,7 @@ const fluxHausPresentation = (
   if (frame === "carBattery") {
     const car = snapshot?.car;
     const range = car?.evRangeKm ?? car?.totalRangeKm;
-    const detail = car
-      ? `${range == null ? "--" : Math.round(range)}KM ${compactAge(car.updatedAt, nowMs)}`
-      : "--";
+    const detail = car ? `${range == null ? "--" : Math.round(range)} KM` : "--";
     return fluxHausCard(
       "car",
       "CAR",
@@ -1550,7 +1576,10 @@ const fluxHausPresentation = (
       car ? `${Math.round(car.batteryPercent)}%` : "--",
       fluxHausPalette("car"),
       dark,
-      car?.charging ? COLORS.yellow : undefined,
+      {
+        ...(car?.charging ? { indicator: COLORS.yellow } : {}),
+        ...(car ? { freshness: compactAge(car.updatedAt, nowMs) } : {}),
+      },
     );
   }
 
@@ -1599,7 +1628,7 @@ const completionPresentation = (
     "DONE",
     fluxHausPalette("complete"),
     dark,
-    COLORS.green,
+    { indicator: COLORS.green },
   );
 
 const clockPresentation = (
