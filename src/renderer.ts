@@ -47,7 +47,8 @@ export type FrontFrame =
   | "piCpuTemperature"
   | "routerBatteryCharge"
   | "routerBatteryTemperature"
-  | "carBattery"
+  | "carRange"
+  | "carUpdated"
   | "fluxhausWasher"
   | "fluxhausDryer"
   | "fluxhausDishwasher"
@@ -480,7 +481,7 @@ export const availableFrontFrames = (
     config.fluxHaus !== null &&
     ageMs(state.fluxHausReceivedAtMs, nowMs) <= config.fluxHaus.staleAfterMs;
   const carFrames: FrontFrame[] =
-    fluxHausFresh && state.fluxHaus?.car ? ["carBattery"] : [];
+    fluxHausFresh && state.fluxHaus?.car ? ["carRange", "carUpdated"] : [];
   const fluxHausFrameById: Record<FluxHausDeviceId, FrontFrame> = {
     washer: "fluxhausWasher",
     dryer: "fluxhausDryer",
@@ -509,7 +510,9 @@ export const availableFrontFrames = (
     ? activeFluxHausFrames
     : activeFluxHausFrames.length === 0
       ? normalFrames
-      : normalFrames.flatMap((frame) => [frame, ...activeFluxHausFrames]);
+      : normalFrames.flatMap((frame) =>
+          frame === "carRange" ? [frame] : [frame, ...activeFluxHausFrames],
+        );
   const selectedFrames =
     state.idleMode === "weather"
       ? weatherAvailable
@@ -1424,54 +1427,46 @@ const fluxHausDeviceForFrame = (
 
 export const fluxHausPalette = (
   id: FluxHausDeviceId | "car" | "complete",
-): { background: Gradient; accent: string; icon: string } => {
+): { background: Gradient; icon: string } => {
   switch (id) {
     case "washer":
       return {
         background: [COLORS.blueDark, COLORS.cyanDark],
-        accent: "#173E4AFF",
         icon: "#72DCFFFF",
       };
     case "dryer":
       return {
-        background: ["#78350FFF", "#C65D08FF"],
-        accent: "#4D2A0AFF",
+        background: [COLORS.amberDark, COLORS.amber],
         icon: "#FF9F32FF",
       };
     case "dishwasher":
       return {
-        background: [COLORS.blueDark, "#245F79FF"],
-        accent: "#173446FF",
+        background: [COLORS.slateDark, COLORS.blueDark],
         icon: "#7DD3FCFF",
       };
     case "broombot":
       return {
-        background: [COLORS.greenDark, "#23894AFF"],
-        accent: "#173B25FF",
+        background: [COLORS.greenDark, COLORS.green],
         icon: "#73E895FF",
       };
     case "mopbot":
       return {
-        background: ["#075985FF", "#0F766EFF"],
-        accent: "#123D3AFF",
+        background: [COLORS.blueDark, COLORS.cyanDark],
         icon: "#5EEAD4FF",
       };
     case "airPurifier":
       return {
-        background: [COLORS.slateDark, COLORS.slate],
-        accent: "#273449FF",
-        icon: "#94A3B8FF",
+        background: [COLORS.violetDark, COLORS.slate],
+        icon: COLORS.ice,
       };
     case "car":
       return {
-        background: ["#3F3F46FF", "#71717AFF"],
-        accent: "#453D16FF",
+        background: [COLORS.slateDark, COLORS.amberDark],
         icon: "#FACC15FF",
       };
     case "complete":
       return {
         background: [COLORS.greenDark, COLORS.green],
-        accent: "#173B25FF",
         icon: "#86EFACFF",
       };
   }
@@ -1486,30 +1481,18 @@ const fluxHausCard = (
   dark: boolean,
   options: {
     indicator?: string;
-    freshness?: string;
+    valueLabel?: string;
   } = {},
 ): FrontPresentation => {
   const textColor = dark ? palette.icon : COLORS.white;
-  const freshnessElements: DisplayElement[] = options.freshness
-    ? [
-        frontRectangle("front-fluxhaus-age-top", 40, 10, 3, 1, textColor),
-        frontRectangle("front-fluxhaus-age-left", 39, 11, 1, 3, textColor),
-        frontRectangle("front-fluxhaus-age-right", 43, 11, 1, 3, textColor),
-        frontRectangle("front-fluxhaus-age-bottom", 40, 14, 3, 1, textColor),
-        frontRectangle("front-fluxhaus-age-hand-v", 41, 11, 1, 2, textColor),
-        frontRectangle("front-fluxhaus-age-hand-h", 42, 12, 1, 1, textColor),
-        frontText(
-          "front-fluxhaus-freshness",
-          options.freshness,
-          45,
-          10,
-          "tiny",
-          textColor,
-          "top_left",
-          8,
-        ),
-      ]
-    : [];
+  const valueFont: TextElement["font"] =
+    value.length > 4
+      ? "tiny"
+      : value.length > 3
+        ? "small"
+        : value.length > 2
+          ? "condensed"
+          : "large";
 
   return {
     elements: [
@@ -1517,42 +1500,55 @@ const fluxHausCard = (
       ...fluxHausIconElements("front-fluxhaus", icon, palette.icon),
       frontRectangle(
         "front-fluxhaus-badge",
-        54,
-        1,
-        17,
-        14,
-        dark ? palette.accent : "#05070CCC",
+        53,
+        0,
+        19,
+        16,
+        dark ? COLORS.trueBlack : "#05070CCC",
       ),
       frontText(
         "front-fluxhaus-title",
         title,
-        21,
+        20,
         1,
-        title.length > 6 ? "tiny" : "small",
+        title.length > 6 ? "tiny" : title.length > 5 ? "small" : "normal",
         textColor,
         "top_left",
-        31,
+        32,
       ),
       frontText(
         "front-fluxhaus-detail",
         detail,
-        21,
+        20,
         10,
         "tiny",
         textColor,
         "top_left",
-        options.freshness ? 17 : 31,
+        32,
       ),
-      ...freshnessElements,
+      ...(options.valueLabel
+        ? [
+            frontText(
+              "front-fluxhaus-value-label",
+              options.valueLabel,
+              62.5,
+              1,
+              "tiny",
+              palette.icon,
+              "top_mid",
+              19,
+            ),
+          ]
+        : []),
       frontText(
         "front-fluxhaus-value",
         value,
-        62,
-        8,
-        value.length > 3 ? "tiny" : "small",
+        62.5,
+        options.valueLabel ? 10 : 8,
+        valueFont,
         palette.icon,
         "center",
-        15,
+        19,
       ),
     ],
     ...(options.indicator ? { indicator: options.indicator } : {}),
@@ -1565,21 +1561,24 @@ const fluxHausPresentation = (
   nowMs: number,
   dark: boolean,
 ): FrontPresentation => {
-  if (frame === "carBattery") {
+  if (frame === "carRange" || frame === "carUpdated") {
     const car = snapshot?.car;
     const range = car?.evRangeKm ?? car?.totalRangeKm;
-    const detail = car ? `${range == null ? "--" : Math.round(range)} KM` : "--";
+    const age = car ? compactAge(car.updatedAt, nowMs) : "--";
     return fluxHausCard(
       "car",
-      "CAR",
-      detail,
+      frame === "carRange" ? "RANGE" : "UPDATED",
+      frame === "carRange"
+        ? car
+          ? `${range == null ? "--" : Math.round(range)} KM`
+          : "--"
+        : age === "--"
+          ? age
+          : `${age} AGO`,
       car ? `${Math.round(car.batteryPercent)}%` : "--",
       fluxHausPalette("car"),
       dark,
-      {
-        ...(car?.charging ? { indicator: COLORS.yellow } : {}),
-        ...(car ? { freshness: compactAge(car.updatedAt, nowMs) } : {}),
-      },
+      car?.charging ? { indicator: COLORS.yellow } : {},
     );
   }
 
@@ -1587,13 +1586,29 @@ const fluxHausPresentation = (
   if (!device) {
     return fluxHausCard("complete", "FLUX", "UNAVAILABLE", "--", fluxHausPalette("complete"), dark);
   }
+  if (device.id === "airPurifier") {
+    const pm25 = device.airQualityPm25;
+    return fluxHausCard(
+      device.id,
+      "PURIFIER",
+      device.status.toUpperCase(),
+      pm25 === null || pm25 === undefined
+        ? device.progressPercent === null
+          ? "ON"
+          : `${Math.round(device.progressPercent)}%`
+        : String(Math.round(pm25)),
+      fluxHausPalette(device.id),
+      dark,
+      pm25 === null || pm25 === undefined ? {} : { valueLabel: "PM25" },
+    );
+  }
   const titleById: Record<FluxHausDeviceId, string> = {
     washer: "WASHER",
     dryer: "DRYER",
     dishwasher: "DISH",
     broombot: "BROOM",
     mopbot: "MOP",
-    airPurifier: "AIR",
+    airPurifier: "PURIFIER",
   };
   const value =
     compactDuration(device.remainingSeconds) ??
@@ -1603,14 +1618,10 @@ const fluxHausPresentation = (
         ? "ON"
         : `${Math.round(device.progressPercent)}%`
       : `${Math.round(device.batteryPercent)}%`);
-  const detail =
-    device.id === "airPurifier" && device.progressPercent !== null
-      ? `${device.detail ?? device.status} ${Math.round(device.progressPercent)}%`
-      : (device.detail ?? device.status);
   return fluxHausCard(
     device.id,
     titleById[device.id],
-    detail.toUpperCase(),
+    (device.detail ?? device.status).toUpperCase(),
     value,
     fluxHausPalette(device.id),
     dark,
@@ -1966,7 +1977,8 @@ const idlePresentation = (
       : summaryPresentation(DEFAULT_FRONT_FRAME, state.summary, dark);
   }
   if (
-    frame === "carBattery" ||
+    frame === "carRange" ||
+    frame === "carUpdated" ||
     frame === "fluxhausWasher" ||
     frame === "fluxhausDryer" ||
     frame === "fluxhausDishwasher" ||

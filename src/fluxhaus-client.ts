@@ -26,6 +26,7 @@ export interface FluxHausDeviceStatus {
   status: string;
   detail: string | null;
   progressPercent: number | null;
+  airQualityPm25?: number | null;
   remainingSeconds: number | null;
   elapsedSeconds?: number | null;
   batteryPercent: number | null;
@@ -300,18 +301,15 @@ const normalizeAirPurifier = (
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
   const preset = normalizeText(device.presetMode);
-  const pm25 =
-    device.pm25 === null || device.pm25 === undefined
-      ? null
-      : `PM${Math.round(device.pm25)}`;
   return {
     id: "airPurifier",
     name: "Air purifier",
     active: device.fanOn === true,
     lifecycle: device.fanOn === true ? "active" : "inactive",
-    status: device.fanOn ? "Running" : device.online === false ? "Offline" : "Off",
-    detail: [preset, pm25].filter((value): value is string => value !== null).join(" ") || null,
+    status: device.fanOn ? (preset ?? "Running") : device.online === false ? "Offline" : "Off",
+    detail: null,
     progressPercent: clampPercent(device.fanSpeed),
+    airQualityPm25: device.pm25 ?? null,
     remainingSeconds: null,
     elapsedSeconds: null,
     batteryPercent: null,

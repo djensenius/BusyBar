@@ -12,6 +12,7 @@ import { startBusyBarInputStream } from "./input-stream.js";
 import type {
   BackPage,
   CompletionAlert,
+  FrontFrame,
   IdleMode,
   MonitorState,
   SceneAnnouncement,
@@ -57,6 +58,9 @@ const nextFrontFrame = (
   const index = (matchingIndex + 1) % frames.length;
   return { frame: frames[index] ?? frames[0] ?? DEFAULT_FRONT_FRAME, index };
 };
+
+const isHalfDurationFrontFrame = (frame: FrontFrame): boolean =>
+  frame === "carRange" || frame === "carUpdated";
 
 const IDLE_MODES: readonly IdleMode[] = [
   "weather",
@@ -186,6 +190,7 @@ export class Monitor {
   #fluxHausSourceSignature: string | null = null;
   #fluxHausInitialized = false;
   #frontFrameIndex = 0;
+  #frontFrameHalfElapsed = false;
   readonly #completionQueue: CompletionAlert[] = [];
   #completionTimer: NodeJS.Timeout | null = null;
   #brightnessValue: number | "auto" | null = null;
@@ -241,21 +246,7 @@ export class Monitor {
       this.#showNextCompletion();
     }, 5_000);
     this.#freshnessTimer.unref();
-    this.#rotationTimer = setInterval(() => {
-      if (
-        (this.#state.status?.state !== "idle" && !isBetweenExhibitions(this.#state, this.#config, Date.now())) ||
-        this.#state.completionAlert
-      ) return;
-      const frames = availableFrontFrames(this.#state, this.#config, Date.now());
-      const next = nextFrontFrame(this.#state.frontFrame, frames, this.#frontFrameIndex);
-      this.#frontFrameIndex = next.index;
-      this.#state = {
-        ...this.#state,
-        frontFrame: next.frame,
-      };
-      this.#scheduleRender();
-    }, this.#config.frontRotationMs);
-    this.#rotationTimer.unref();
+    this.#restartFrontRotation();
     this.#state = { ...this.#state, cloudConnected: true };
     if (this.#config.startSceneId && this.#config.startToggleLightIds.length > 0) {
       this.#refreshSmartHomeStatus();
@@ -267,6 +258,35 @@ export class Monitor {
     this.#showNextCompletion();
     this.#scheduleRender();
     log.info("BUSY Bar monitor started");
+  }
+
+  #restartFrontRotation(): void {
+    if (this.#rotationTimer) clearInterval(this.#rotationTimer);
+    this.#frontFrameHalfElapsed = false;
+    if (!this.#started || this.#stopped) return;
+    this.#rotationTimer = setInterval(() => {
+      if (
+        (this.#state.status?.state !== "idle" && !isBetweenExhibitions(this.#state, this.#config, Date.now())) ||
+        this.#state.completionAlert
+      ) return;
+      const frames = availableFrontFrames(this.#state, this.#config, Date.now());
+      const current = frames.includes(this.#state.frontFrame)
+        ? this.#state.frontFrame
+        : (frames[0] ?? DEFAULT_FRONT_FRAME);
+      if (!isHalfDurationFrontFrame(current) && !this.#frontFrameHalfElapsed) {
+        this.#frontFrameHalfElapsed = true;
+        return;
+      }
+      this.#frontFrameHalfElapsed = false;
+      const next = nextFrontFrame(current, frames, this.#frontFrameIndex);
+      this.#frontFrameIndex = next.index;
+      this.#state = {
+        ...this.#state,
+        frontFrame: next.frame,
+      };
+      this.#scheduleRender();
+    }, this.#config.frontRotationMs / 2);
+    this.#rotationTimer.unref();
   }
 
   updateOperatorFeedHealth(feed: "status" | "system" | "router", healthy: boolean): void {
@@ -376,7 +396,10 @@ export class Monitor {
       statusReceivedAtMs: Math.max(this.#state.statusReceivedAtMs ?? 0, cappedReceivedAtMs),
       frontFrame: status.state === "idle" && wasActive ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
-    if (status.state === "idle" && wasActive) this.#frontFrameIndex = 0;
+    if (status.state === "idle" && wasActive) {
+      this.#frontFrameIndex = 0;
+      this.#frontFrameHalfElapsed = false;
+    }
     this.#showNextCompletion();
     this.#scheduleRender();
   }
@@ -404,7 +427,10 @@ export class Monitor {
       systemReceivedAtMs: Math.min(receivedAtMs, Date.now()),
       frontFrame: recovered ? DEFAULT_FRONT_FRAME : this.#state.frontFrame,
     };
-    if (recovered) this.#frontFrameIndex = 0;
+    if (recovered) {
+      this.#frontFrameIndex = 0;
+      this.#frontFrameHalfElapsed = false;
+    }
     this.#showNextCompletion();
     this.#scheduleRender();
   }
@@ -520,6 +546,7 @@ export class Monitor {
       const matchingIndex = frames.indexOf(nextState.frontFrame);
       this.#frontFrameIndex = matchingIndex >= 0 ? matchingIndex : 0;
       nextState.frontFrame = frames[this.#frontFrameIndex] ?? DEFAULT_FRONT_FRAME;
+      this.#frontFrameHalfElapsed = false;
     }
     this.#state = nextState;
     for (const alert of completed) {
@@ -567,6 +594,7 @@ export class Monitor {
       this.#state = { ...this.#state, completionAlert: null };
       this.#scheduleRender();
       this.#showNextCompletion();
+      if (!this.#state.completionAlert) this.#restartFrontRotation();
     }, COMPLETION_ALERT_MS);
     this.#completionTimer.unref();
   }
@@ -582,6 +610,7 @@ export class Monitor {
     }
     this.#state = { ...this.#state, completionAlert: null };
     this.#showNextCompletion();
+    if (!this.#state.completionAlert) this.#restartFrontRotation();
   }
 
   async #playCompletionAlertSound(alert: CompletionAlert): Promise<void> {
@@ -788,6 +817,7 @@ export class Monitor {
       const state = { ...this.#state, idleMode };
       const frames = availableFrontFrames(state, this.#config, Date.now());
       this.#frontFrameIndex = 0;
+      this.#frontFrameHalfElapsed = false;
       this.#state = {
         ...state,
         frontFrame: frames[0] ?? DEFAULT_FRONT_FRAME,
@@ -875,6 +905,7 @@ export class Monitor {
       if (wasDisconnected) {
         this.#state = { ...this.#state, frontFrame: DEFAULT_FRONT_FRAME };
         this.#frontFrameIndex = 0;
+        this.#frontFrameHalfElapsed = false;
         this.#scheduleRender();
       }
     } catch (error) {
