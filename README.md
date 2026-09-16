@@ -4,7 +4,7 @@ Standalone physical status monitor for the
 [Telephone-Booth](https://github.com/djensenius/Telephone-Booth) art
 installation. It reads the authenticated
 [Telephone-Booth Operator](https://github.com/djensenius/Telephone-Booth-Operator)
-API and renders booth state, today/overall counters, booth hardware vitals, time,
+API and renders booth state, current-exhibition counters, booth hardware vitals, time,
 optional weather, and system health through BUSY Cloud, with automatic LAN
 failover when the local device URL and access key are configured.
 It can also read the FluxHaus aggregate status API to interleave active
@@ -28,9 +28,9 @@ gradient cards:
 
 - `PICKUP / DAY / n`
 - `MSGS / DAY / n`
-- `PICKUP / ALL / n`
-- `MSGS / ALL / n`
-- When the Operator summary includes `messagePlaybackStartsTotal`, `LISTEN / ALL / n`
+- `PICKUP / EXH / n`
+- `MSGS / EXH / n`
+- When the Operator summary includes `messagePlaybackStartsTotal`, `LISTEN / EXH / n`
 - When the Operator summary includes `breakdownToday`, daily `NO DIAL`,
   `WRONG`, `LEFT`, `LISTEN`, and `INSTR` cards
 - Fresh booth telemetry adds a four-step fan cooling meter and the Pi CPU temperature
@@ -49,15 +49,20 @@ gradient cards:
 - Current weather, when Home Assistant weather is configured
 
 Set `BUSY_BAR_FRONT_ROTATION_SECONDS` from 3 to 600 seconds (10 minutes) to
-control how long each idle card remains visible.
+control how long each idle card remains visible. `EXH` totals cover only the
+current exhibition, never archived exhibitions. `DAY` counts are today's portion
+of that same exhibition.
 
 Live booth activity interrupts the carousel immediately with `CALLING`, `PLAYING`,
 `RECORDING`, or `SENDING`. Warnings and faults remain pinned until recovery.
 
 When the Operator explicitly reports `installationState: "between_exhibitions"`,
-offline is expected. Telephone cards show a neutral `BETWEEN` label and the rear
-overview explains that the next exhibition must be started in the Operator
-console. Clock, weather, and smart-home cards continue normally. Missing or stale
+offline is expected. Phone statistics and booth/router carousel cards are removed,
+including in telephone-only mode; clock, weather, car, and appliance cards continue.
+If no other cards are available, a single neutral `BETWEEN` screen is shown.
+The rear overview explains how to start the next exhibition in the Operator
+console. Cached phone totals are cleared on lifecycle transitions and return after
+a fresh summary arrives. Missing or stale
 booth telemetry does not sound an offline alarm during confirmed downtime.
 Lifecycle is reconciled by status polling even when the API returns a synthetic,
 id-less status; that response never counts as a fresh booth heartbeat.
@@ -259,8 +264,13 @@ The counter carousel requires Operator API support for
 this worker. Older Operator releases still provide state and health, but summary
 polls will log `404` until the endpoint is available.
 
-During the rolling additive analytics rollout, older summary payloads still
-drive the four core `PICKUP`/`MSGS` day and all-time pickup cards. Matching
-Operator releases automatically add the optional `LISTEN / ALL` card, the five
-daily breakout cards, and the rear overview breakout from the additive
-`interactions*` fields.
+Exhibition-only counters require an Operator release that scopes
+`GET /v1/monitor/summary` to the current exhibition and reports
+`installationState` in status responses. The worker does not re-scope totals
+returned by older servers; deploy that Operator support first. Legacy summaries
+without an active-exhibition marker retain the `ALL` label rather than claiming
+their totals are exhibition-scoped.
+
+The four core `PICKUP`/`MSGS` cards show `DAY` and `EXH` counts. Optional summary
+fields add the `LISTEN / EXH` card, the five daily breakout cards, and the rear
+overview breakout from the additive `interactions*` fields.

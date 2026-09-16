@@ -86,6 +86,7 @@ const routerTelemetry = (): RouterTelemetryEnvelope => ({
 });
 
 const summary = (): MonitorSummary => ({
+  installationState: "active",
   interactionsToday: 12,
   messagesToday: 8,
   interactionsTotal: 342,
@@ -215,7 +216,7 @@ describe("monitor lifecycle", () => {
   it("accepts synthetic downtime after a newer heartbeat and resumes on explicit start", async () => {
     const client = createClient();
     const monitor = new Monitor({
-      ...config, frontRotationMs: 60_000, audioEnabled: true, alertSound: "alarm",
+      ...config, clockEnabled: false, frontRotationMs: 60_000, audioEnabled: true, alertSound: "alarm",
     }, client);
     monitor.updateStatus(status("recording"));
     const delayed = { ...status("recording"), id: 2, installationState: "active" as const };
@@ -271,7 +272,7 @@ describe("monitor lifecycle", () => {
 
   it("retains fresh runtime faults across synthetic polls without refreshing their age", async () => {
     const client = createClient();
-    const monitor = new Monitor({ ...config, frontRotationMs: 600_000 }, client);
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 600_000 }, client);
     monitor.updateStatus(status("error"));
     monitor.updateSystem(system());
     await monitor.start();
@@ -297,7 +298,7 @@ describe("monitor lifecycle", () => {
 
   it("does not mask API failures with expected downtime or another feed's recovery", async () => {
     const client = createClient();
-    const monitor = new Monitor(config, client);
+    const monitor = new Monitor({ ...config, clockEnabled: false }, client);
     monitor.updateStatus({
       state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
       isSynthetic: true, installationState: "between_exhibitions",
@@ -334,6 +335,127 @@ describe("monitor lifecycle", () => {
       "PICKUP",
       "DAY",
       "12",
+    ]);
+    await monitor.stop();
+  });
+
+  it("preserves a summary that arrives before the first active status poll", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateSummary({ ...summary(), installationState: "active" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "12",
+    ]);
+    await monitor.stop();
+  });
+
+  it("clears an early summary when the first status poll reports downtime", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateSummary({ ...summary(), installationState: "active" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "--",
+    ]);
+    await monitor.stop();
+  });
+
+  it("accepts fresh summaries after downtime confirmation expires without masking offline status", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(config.statusStaleAfterMs + 1);
+    monitor.updateSummary({ ...summary(), interactionsToday: 3 });
+    await vi.advanceTimersByTimeAsync(250);
+    const payload = client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams;
+    expect(frontTexts(payload)).toEqual(["OFFLINE"]);
+    expect(payload.elements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ display: "back", text: "DAY PICKUPS 3 MSGS 8" }),
+    ]));
+    await monitor.stop();
+  });
+
+  it("invalidates cached totals when a newer summary reports downtime before status polling", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    const previous = { ...summary(), installationState: "active" as const };
+    monitor.updateSummary(previous);
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const downtime = { ...summary(), installationState: "between_exhibitions" as const };
+    monitor.updateSummary(downtime);
+    monitor.updateSummary(previous);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "--",
+    ]);
+    monitor.updateSummary({
+      ...summary(), installationState: "active", interactionsToday: 3, interactionsTotal: 3,
+    });
+    monitor.updateSummary(downtime);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "3",
+    ]);
+    await monitor.stop();
+  });
+
+  it("drops the previous exhibition's totals until a fresh post-start summary arrives", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateStatus({ ...status("idle"), installationState: "active" });
+    monitor.updateSystem(system());
+    const previous = { ...summary(), installationState: "active" as const };
+    monitor.updateSummary(previous);
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "12",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    monitor.updateSummary(previous);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual(["BETWEEN"]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.updateStatus({ ...status("idle"), id: 2, installationState: "active" });
+    monitor.updateSummary(previous);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "--",
+    ]);
+    monitor.updateSummary({
+      ...summary(), installationState: "active", interactionsToday: 3, interactionsTotal: 3,
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "PICKUP", "DAY", "3",
     ]);
     await monitor.stop();
   });
@@ -958,7 +1080,7 @@ describe("monitor lifecycle", () => {
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "PICKUP",
-      "ALL",
+      "EXH",
       "342",
     ]);
     await monitor.stop();
@@ -990,8 +1112,8 @@ describe("monitor lifecycle", () => {
     for (const expected of [
       ["PICKUP", "DAY", "12"],
       ["MSGS", "DAY", "8"],
-      ["PICKUP", "ALL", "342"],
-      ["MSGS", "ALL", "187"],
+      ["PICKUP", "EXH", "342"],
+      ["MSGS", "EXH", "187"],
       ["FAN", "MEDIUM"],
       ["PI", "CPU TEMP", "49"],
       ["BATTERY", "ROUTER", "78%"],
@@ -1029,8 +1151,8 @@ describe("monitor lifecycle", () => {
     ]);
     for (const expected of [
       ["MSGS", "DAY", "8"],
-      ["PICKUP", "ALL", "342"],
-      ["MSGS", "ALL", "187"],
+      ["PICKUP", "EXH", "342"],
+      ["MSGS", "EXH", "187"],
       ["NO DIAL", "DAY", "3"],
       ["WRONG", "DAY", "5"],
       ["LEFT", "DAY", "4"],
@@ -1060,8 +1182,8 @@ describe("monitor lifecycle", () => {
     for (const expected of [
       ["PICKUP", "DAY", "12"],
       ["MSGS", "DAY", "8"],
-      ["PICKUP", "ALL", "342"],
-      ["MSGS", "ALL", "187"],
+      ["PICKUP", "EXH", "342"],
+      ["MSGS", "EXH", "187"],
       ["NO DIAL", "DAY", "3"],
       ["WRONG", "DAY", "5"],
       ["LEFT", "DAY", "4"],
@@ -1095,9 +1217,9 @@ describe("monitor lifecycle", () => {
     for (const expected of [
       ["PICKUP", "DAY", "12"],
       ["MSGS", "DAY", "8"],
-      ["PICKUP", "ALL", "342"],
-      ["MSGS", "ALL", "187"],
-      ["LISTEN", "ALL", "48"],
+      ["PICKUP", "EXH", "342"],
+      ["MSGS", "EXH", "187"],
+      ["LISTEN", "EXH", "48"],
       ["NO DIAL", "DAY", "3"],
       ["WRONG", "DAY", "5"],
       ["LEFT", "DAY", "4"],
@@ -1118,19 +1240,19 @@ describe("monitor lifecycle", () => {
     await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "PICKUP",
-      "ALL",
+      "EXH",
       "342",
     ]);
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "MSGS",
-      "ALL",
+      "EXH",
       "187",
     ]);
     await vi.advanceTimersByTimeAsync(config.frontRotationMs + config.renderDebounceMs);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "LISTEN",
-      "ALL",
+      "EXH",
       "0",
     ]);
 

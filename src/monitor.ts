@@ -287,6 +287,15 @@ export class Monitor {
     // cannot undo a newer end, even if they carry an old active marker.
     if (source === "poll") {
       if (
+        status.installationState !== undefined &&
+        status.installationState !== this.#state.installationState &&
+        (this.#state.installationState !== undefined ||
+          status.installationState === "between_exhibitions")
+      ) {
+        this.#state = { ...this.#state, summary: null };
+        this.#summarySourceAtMs = Date.now();
+      }
+      if (
         status.installationState === "between_exhibitions" &&
         this.#state.installationState !== "between_exhibitions"
       ) {
@@ -428,6 +437,7 @@ export class Monitor {
   }
 
   updateSummary(summary: MonitorSummary): void {
+    if (isBetweenExhibitions(this.#state, this.#config, Date.now())) return;
     const generatedAtMs = Date.parse(summary.generatedAt);
     const sourceAtMs = Math.min(
       Number.isFinite(generatedAtMs) ? generatedAtMs : Date.now(),
@@ -435,7 +445,10 @@ export class Monitor {
     );
     if (this.#summarySourceAtMs !== null && sourceAtMs < this.#summarySourceAtMs) return;
     this.#summarySourceAtMs = sourceAtMs;
-    this.#state = { ...this.#state, summary };
+    this.#state = {
+      ...this.#state,
+      summary: summary.installationState === "between_exhibitions" ? null : summary,
+    };
     this.#scheduleRender();
   }
 
