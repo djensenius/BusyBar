@@ -20,6 +20,7 @@ const COLORS = {
   green: "#30d158",
   greenDark: "#12612c",
   black: "#041616",
+  trueBlack: "#000000",
   white: "#ffffff",
 };
 
@@ -1006,12 +1007,12 @@ const drawFluxHausIcon = (context, icon) => {
 
 const drawFluxHaus = (context, design) => {
   context.fillStyle = design.dark
-    ? COLORS.black
+    ? COLORS.trueBlack
     : gradient(context, design.start, design.end);
   context.fillRect(0, 0, 72, 16);
   drawFluxHausIcon(context, design.icon);
 
-  context.fillStyle = design.dark ? "#000000" : "#05070ccc";
+  context.fillStyle = design.dark ? COLORS.trueBlack : "#05070ccc";
   context.fillRect(53, 0, 19, 16);
   context.fillStyle = design.iconAccent;
 

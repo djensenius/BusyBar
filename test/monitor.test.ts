@@ -559,6 +559,64 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("restarts an interrupted car half-card after a completion alert", async () => {
+    vi.setSystemTime(new Date("2026-07-31T20:00:00.000Z"));
+    const client = createClient();
+    const monitor = new Monitor({
+      ...config,
+      fluxHaus: {
+        url: "https://haus.example.com",
+        username: "demo",
+        password: "secret",
+        pollIntervalMs: 10_000,
+        staleAfterMs: 120_000,
+      },
+    }, client);
+    const car = {
+      batteryPercent: 78,
+      evRangeKm: 356,
+      totalRangeKm: 356,
+      charging: false,
+      updatedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+    };
+    monitor.updateStatus({
+      state: "idle",
+      updatedAt: new Date().toISOString(),
+      isSynthetic: true,
+      installationState: "between_exhibitions",
+    });
+    monitor.updateFluxHaus({ ...fluxHausSnapshot({ washer: true }), car });
+
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RANGE", "356 KM", "78%",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1_750);
+    monitor.updateFluxHaus({ ...fluxHausSnapshot({ washer: false }), car });
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "WASHER", "CYCLE", "DONE",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(10_000 + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RANGE", "356 KM", "78%",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(config.frontRotationMs / 2 - 1);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "RANGE", "356 KM", "78%",
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1 + config.renderDebounceMs);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "UPDATED", "12M AGO", "78%",
+    ]);
+    await monitor.stop();
+  });
+
   it("suppresses startup completions and alerts once when equipment finishes", async () => {
     const client = createClient();
     const monitor = new Monitor(

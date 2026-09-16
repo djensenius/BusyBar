@@ -246,6 +246,24 @@ export class Monitor {
       this.#showNextCompletion();
     }, 5_000);
     this.#freshnessTimer.unref();
+    this.#restartFrontRotation();
+    this.#state = { ...this.#state, cloudConnected: true };
+    if (this.#config.startSceneId && this.#config.startToggleLightIds.length > 0) {
+      this.#refreshSmartHomeStatus();
+      this.#smartHomePollTimer = setInterval(() => {
+        this.#refreshSmartHomeStatus();
+      }, SMART_HOME_POLL_INTERVAL_MS);
+      this.#smartHomePollTimer.unref();
+    }
+    this.#showNextCompletion();
+    this.#scheduleRender();
+    log.info("BUSY Bar monitor started");
+  }
+
+  #restartFrontRotation(): void {
+    if (this.#rotationTimer) clearInterval(this.#rotationTimer);
+    this.#frontFrameHalfElapsed = false;
+    if (!this.#started || this.#stopped) return;
     this.#rotationTimer = setInterval(() => {
       if (
         (this.#state.status?.state !== "idle" && !isBetweenExhibitions(this.#state, this.#config, Date.now())) ||
@@ -269,17 +287,6 @@ export class Monitor {
       this.#scheduleRender();
     }, this.#config.frontRotationMs / 2);
     this.#rotationTimer.unref();
-    this.#state = { ...this.#state, cloudConnected: true };
-    if (this.#config.startSceneId && this.#config.startToggleLightIds.length > 0) {
-      this.#refreshSmartHomeStatus();
-      this.#smartHomePollTimer = setInterval(() => {
-        this.#refreshSmartHomeStatus();
-      }, SMART_HOME_POLL_INTERVAL_MS);
-      this.#smartHomePollTimer.unref();
-    }
-    this.#showNextCompletion();
-    this.#scheduleRender();
-    log.info("BUSY Bar monitor started");
   }
 
   updateOperatorFeedHealth(feed: "status" | "system" | "router", healthy: boolean): void {
@@ -587,6 +594,7 @@ export class Monitor {
       this.#state = { ...this.#state, completionAlert: null };
       this.#scheduleRender();
       this.#showNextCompletion();
+      if (!this.#state.completionAlert) this.#restartFrontRotation();
     }, COMPLETION_ALERT_MS);
     this.#completionTimer.unref();
   }
@@ -602,6 +610,7 @@ export class Monitor {
     }
     this.#state = { ...this.#state, completionAlert: null };
     this.#showNextCompletion();
+    if (!this.#state.completionAlert) this.#restartFrontRotation();
   }
 
   async #playCompletionAlertSound(alert: CompletionAlert): Promise<void> {
