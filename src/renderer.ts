@@ -1031,13 +1031,13 @@ const summaryLabelFont = (label: string): TextElement["font"] =>
 
 const summaryCard = (
   label: string,
-  period: "DAY" | "EXH",
+  period: "DAY" | "EXH" | "ALL",
   rawCount: number | undefined,
   background: Gradient,
   accent: string,
 ): {
   label: string;
-  period: "DAY" | "EXH";
+  period: "DAY" | "EXH" | "ALL";
   count: string;
   background: Gradient;
   accent: string;
@@ -1054,11 +1054,12 @@ const summaryFrameCard = (
   summary: MonitorSummary | null,
 ): {
   label: string;
-  period: "DAY" | "EXH";
+  period: "DAY" | "EXH" | "ALL";
   count: string;
   background: Gradient;
   accent: string;
 } => {
+  const totalPeriod = summary?.installationState === "active" ? "EXH" : "ALL";
   switch (frame) {
     case "interactionsToday":
       return summaryCard(
@@ -1079,7 +1080,7 @@ const summaryFrameCard = (
     case "interactionsTotal":
       return summaryCard(
         PICKUP_FRONT_LABEL,
-        "EXH",
+        totalPeriod,
         summary?.interactionsTotal,
         [COLORS.blueDark, COLORS.cyanDark],
         COLORS.cyan,
@@ -1087,7 +1088,7 @@ const summaryFrameCard = (
     case "messagesTotal":
       return summaryCard(
         "MSGS",
-        "EXH",
+        totalPeriod,
         summary?.messagesTotal,
         [COLORS.violetDark, COLORS.violet],
         COLORS.violet,
@@ -1095,7 +1096,7 @@ const summaryFrameCard = (
     case "messagePlaybackStartsTotal":
       return summaryCard(
         "LISTEN",
-        "EXH",
+        totalPeriod,
         summary?.messagePlaybackStartsTotal,
         [COLORS.blueDark, COLORS.cyanDark],
         COLORS.cyan,

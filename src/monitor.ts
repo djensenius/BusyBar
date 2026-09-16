@@ -437,7 +437,7 @@ export class Monitor {
   }
 
   updateSummary(summary: MonitorSummary): void {
-    if (this.#state.installationState === "between_exhibitions") return;
+    if (isBetweenExhibitions(this.#state, this.#config, Date.now())) return;
     const generatedAtMs = Date.parse(summary.generatedAt);
     const sourceAtMs = Math.min(
       Number.isFinite(generatedAtMs) ? generatedAtMs : Date.now(),

@@ -130,6 +130,7 @@ const routerTelemetry: RouterTelemetryEnvelope = {
 };
 
 const summary: MonitorSummary = {
+  installationState: "active",
   interactionsToday: 12,
   messagesToday: 8,
   interactionsTotal: 342,
@@ -432,6 +433,20 @@ describe("monitor renderer", () => {
     expect(
       textsFor(renderMonitor({ ...state, frontFrame: "clock" }, config, now).payload, "front"),
     ).not.toContain("BETWEEN");
+  });
+
+  it.each([
+    ["interactionsTotal", "PICKUP", "342"],
+    ["messagesTotal", "MSGS", "187"],
+    ["messagePlaybackStartsTotal", "LISTEN", "48"],
+  ] as const)("keeps legacy %s totals labeled ALL without a scoped summary", (frontFrame, label, count) => {
+    const { installationState: _installationState, ...legacySummary } = allTimeListenSummary;
+    const rendered = renderMonitor(model({
+      installationState: "active",
+      frontFrame,
+      summary: legacySummary,
+    }), config, now);
+    expect(textsFor(rendered.payload, "front")).toEqual([label, "ALL", count]);
   });
 
   it("renders pickup and message counters while healthy and idle", () => {

@@ -267,7 +267,9 @@ polls will log `404` until the endpoint is available.
 Exhibition-only counters require an Operator release that scopes
 `GET /v1/monitor/summary` to the current exhibition and reports
 `installationState` in status responses. The worker does not re-scope totals
-returned by older servers; deploy that Operator support first.
+returned by older servers; deploy that Operator support first. Legacy summaries
+without an active-exhibition marker retain the `ALL` label rather than claiming
+their totals are exhibition-scoped.
 
 The four core `PICKUP`/`MSGS` cards show `DAY` and `EXH` counts. Optional summary
 fields add the `LISTEN / EXH` card, the five daily breakout cards, and the rear

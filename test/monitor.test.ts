@@ -86,6 +86,7 @@ const routerTelemetry = (): RouterTelemetryEnvelope => ({
 });
 
 const summary = (): MonitorSummary => ({
+  installationState: "active",
   interactionsToday: 12,
   messagesToday: 8,
   interactionsTotal: 342,
@@ -371,6 +372,25 @@ describe("monitor lifecycle", () => {
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "PICKUP", "DAY", "--",
     ]);
+    await monitor.stop();
+  });
+
+  it("accepts fresh summaries after downtime confirmation expires without masking offline status", async () => {
+    const client = createClient();
+    const monitor = new Monitor({ ...config, clockEnabled: false, frontRotationMs: 60_000 }, client);
+    monitor.updateStatus({
+      state: "idle", updatedAt: "1970-01-01T00:00:00.000Z",
+      isSynthetic: true, installationState: "between_exhibitions",
+    });
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(config.statusStaleAfterMs + 1);
+    monitor.updateSummary({ ...summary(), interactionsToday: 3 });
+    await vi.advanceTimersByTimeAsync(250);
+    const payload = client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams;
+    expect(frontTexts(payload)).toEqual(["OFFLINE"]);
+    expect(payload.elements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ display: "back", text: "DAY PICKUPS 3 MSGS 8" }),
+    ]));
     await monitor.stop();
   });
 
@@ -1261,7 +1281,7 @@ describe("monitor lifecycle", () => {
     await vi.advanceTimersByTimeAsync(250);
     expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
       "PICKUP",
-      "EXH",
+      "ALL",
       "--",
     ]);
     await monitor.stop();
