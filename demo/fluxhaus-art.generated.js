@@ -503,86 +503,65 @@ globalThis.FLUX_HAUS_ART = {
         "color": "#05070BCC"
       },
       {
-        "x": 5,
+        "x": 4,
         "y": 1,
-        "width": 8,
+        "width": 10,
         "height": 1,
         "color": "#D9EFFFFF"
       },
       {
-        "x": 5,
-        "y": 14,
-        "width": 8,
-        "height": 1,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 5,
+        "x": 3,
         "y": 2,
         "width": 1,
         "height": 12,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 12,
-        "y": 2,
-        "width": 1,
-        "height": 12,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 8,
-        "y": 4,
-        "width": 2,
-        "height": 2,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 7,
-        "y": 6,
-        "width": 1,
-        "height": 2,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 10,
-        "y": 6,
-        "width": 1,
-        "height": 2,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 8,
-        "y": 8,
-        "width": 2,
-        "height": 2,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 7,
-        "y": 12,
-        "width": 4,
-        "height": 1,
-        "color": "#D9EFFFFF"
-      },
-      {
-        "x": 15,
-        "y": 4,
-        "width": 2,
-        "height": 1,
         "color": "#D9EFFFFF"
       },
       {
         "x": 14,
-        "y": 7,
-        "width": 3,
+        "y": 2,
+        "width": 1,
+        "height": 12,
+        "color": "#D9EFFFFF"
+      },
+      {
+        "x": 4,
+        "y": 14,
+        "width": 10,
         "height": 1,
         "color": "#D9EFFFFF"
       },
       {
-        "x": 15,
-        "y": 10,
+        "x": 6,
+        "y": 3,
+        "width": 6,
+        "height": 1,
+        "color": "#D9EFFFFF"
+      },
+      {
+        "x": 8,
+        "y": 5,
         "width": 2,
+        "height": 2,
+        "color": "#D9EFFFFF"
+      },
+      {
+        "x": 5,
+        "y": 9,
+        "width": 8,
+        "height": 1,
+        "color": "#D9EFFFFF"
+      },
+      {
+        "x": 5,
+        "y": 11,
+        "width": 8,
+        "height": 1,
+        "color": "#D9EFFFFF"
+      },
+      {
+        "x": 5,
+        "y": 13,
+        "width": 8,
         "height": 1,
         "color": "#D9EFFFFF"
       }

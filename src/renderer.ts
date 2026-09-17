@@ -492,9 +492,16 @@ export const availableFrontFrames = (
   };
   const activeFluxHausFrames: FrontFrame[] = fluxHausFresh
     ? (state.fluxHaus?.devices ?? [])
-        .filter((device) => device.active)
+        .filter((device) => device.active && device.id !== "airPurifier")
         .map((device) => fluxHausFrameById[device.id])
     : [];
+  const airPurifierFrames: FrontFrame[] =
+    fluxHausFresh &&
+    (state.fluxHaus?.devices ?? []).some(
+      (device) => device.id === "airPurifier" && device.active,
+    )
+      ? ["fluxhausAirPurifier"]
+      : [];
   const normalTelephoneFrames = [...telephoneFrames, ...carFrames];
   const weatherAvailable = Boolean(
     config.weather &&
@@ -503,6 +510,7 @@ export const availableFrontFrames = (
   );
   const normalFrames: FrontFrame[] = [
     ...normalTelephoneFrames,
+    ...airPurifierFrames,
     ...(config.clockEnabled ? (["clock"] satisfies FrontFrame[]) : []),
     ...(weatherAvailable ? (["weather"] satisfies FrontFrame[]) : []),
   ];
@@ -1481,7 +1489,6 @@ const fluxHausCard = (
   dark: boolean,
   options: {
     indicator?: string;
-    valueLabel?: string;
   } = {},
 ): FrontPresentation => {
   const textColor = dark ? palette.icon : COLORS.white;
@@ -1526,25 +1533,11 @@ const fluxHausCard = (
         "top_left",
         32,
       ),
-      ...(options.valueLabel
-        ? [
-            frontText(
-              "front-fluxhaus-value-label",
-              options.valueLabel,
-              62.5,
-              1,
-              "tiny",
-              palette.icon,
-              "top_mid",
-              19,
-            ),
-          ]
-        : []),
       frontText(
         "front-fluxhaus-value",
         value,
         62.5,
-        options.valueLabel ? 10 : 8,
+        8,
         valueFont,
         palette.icon,
         "center",
@@ -1590,8 +1583,8 @@ const fluxHausPresentation = (
     const pm25 = device.airQualityPm25;
     return fluxHausCard(
       device.id,
-      "PURIFIER",
-      device.status.toUpperCase(),
+      "AIR",
+      pm25 === null || pm25 === undefined ? device.status.toUpperCase() : "PM2.5",
       pm25 === null || pm25 === undefined
         ? device.progressPercent === null
           ? "ON"
@@ -1599,7 +1592,6 @@ const fluxHausPresentation = (
         : String(Math.round(pm25)),
       fluxHausPalette(device.id),
       dark,
-      pm25 === null || pm25 === undefined ? {} : { valueLabel: "PM25" },
     );
   }
   const titleById: Record<FluxHausDeviceId, string> = {
@@ -1608,7 +1600,7 @@ const fluxHausPresentation = (
     dishwasher: "DISH",
     broombot: "BROOM",
     mopbot: "MOP",
-    airPurifier: "PURIFIER",
+    airPurifier: "AIR",
   };
   const value =
     compactDuration(device.remainingSeconds) ??
