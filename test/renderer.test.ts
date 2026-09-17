@@ -693,7 +693,7 @@ describe("monitor renderer", () => {
     ).toEqual(["UPDATED", "12M AGO", "78%"]);
   });
 
-  it("labels the purifier mode and PM2.5 reading without repeating fan speed", () => {
+  it("renders purifier air quality with the standard card layout", () => {
     const purifierSnapshot: FluxHausSnapshot = {
       ...fluxHaus,
       devices: [
@@ -723,13 +723,14 @@ describe("monitor renderer", () => {
       now,
     ).payload;
 
-    expect(textsFor(payload, "front")).toEqual(["PURIFIER", "AUTO", "PM25", "8"]);
-    expect(frontTextElements(payload).find((element) => element.text === "PURIFIER")).toMatchObject({
-      font: "tiny",
+    expect(textsFor(payload, "front")).toEqual(["AIR", "PM2.5", "8"]);
+    expect(frontTextElements(payload).find((element) => element.text === "AIR")).toMatchObject({
+      font: "normal",
       width: 32,
     });
     expect(frontTextElements(payload).find((element) => element.text === "8")).toMatchObject({
       font: "large",
+      y: 8,
       width: 19,
     });
   });
@@ -848,6 +849,44 @@ describe("monitor renderer", () => {
       "messagesTotal",
       "carRange",
       "carUpdated",
+    ]);
+  });
+
+  it("shows an active purifier once per all-mode rotation", () => {
+    const purifierSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        ...fluxHaus.devices,
+        {
+          id: "airPurifier",
+          name: "Air purifier",
+          active: true,
+          lifecycle: "active",
+          status: "auto",
+          detail: null,
+          progressPercent: 42,
+          airQualityPm25: 8,
+          remainingSeconds: null,
+          elapsedSeconds: null,
+          batteryPercent: null,
+          updatedAt: new Date(now - 1_000).toISOString(),
+        },
+      ],
+    };
+    const frames = availableFrontFrames(
+      model({
+        summary,
+        system: null,
+        systemReceivedAtMs: null,
+        fluxHaus: purifierSnapshot,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    );
+
+    expect(frames.filter((frame) => frame === "fluxhausAirPurifier")).toEqual([
+      "fluxhausAirPurifier",
     ]);
   });
 

@@ -268,16 +268,14 @@ const fluxHausDesigns = [
   },
   {
     icon: "airPurifier",
-    title: "PURIFIER",
-    detail: "AUTO",
-    valueLabel: "PM25",
+    title: "AIR",
+    detail: "PM2.5",
     value: "8",
   },
   {
     icon: "airPurifier",
-    title: "PURIFIER",
-    detail: "NIGHT",
-    valueLabel: "PM25",
+    title: "AIR",
+    detail: "PM2.5",
     value: "4",
     dark: true,
   },
@@ -1027,11 +1025,6 @@ const drawFluxHaus = (context, design) => {
 
   context.fillStyle = design.iconAccent;
   context.textAlign = "center";
-  if (design.valueLabel) {
-    context.textBaseline = "top";
-    context.font = "bold 4px monospace";
-    context.fillText(design.valueLabel, 62.5, 1);
-  }
   context.textBaseline = "middle";
   context.font =
     `bold ${
@@ -1043,7 +1036,7 @@ const drawFluxHaus = (context, design) => {
             ? 7
             : 9
     }px monospace`;
-  context.fillText(design.value, 62.5, design.valueLabel ? 10 : 8);
+  context.fillText(design.value, 62.5, 8);
 };
 
 const render = (canvas, design, blink) => {

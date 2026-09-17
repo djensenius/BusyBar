@@ -38,9 +38,11 @@ gradient cards:
   cards
 - Fresh FluxHaus data adds one car slot split evenly between range and last-update
   age views, with battery charge remaining prominent on both
+- An active air purifier adds one `AIR / PM2.5 / n` card per full `all`-mode
+  rotation
 - While FluxHaus equipment is active, the complete active group is inserted
   after every normal card in the full `all` mode. The group can include the
-  washer, dryer, dishwasher, BroomBot, MopBot, and air purifier
+  washer, dryer, dishwasher, BroomBot, and MopBot
 - Any rendered `DAY` card with an explicit value of `0` is omitted
 - Unknown or missing pickup day totals still render as unavailable (`--`),
   while an absent `breakdownToday` block continues to hide the five breakout
@@ -82,16 +84,17 @@ Weather uses condition-specific artwork for every Home Assistant weather state.
 Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
 FluxHaus cards use device-specific pixel art and update through the same
-debounced rendering path as the existing status sources. The purifier card uses
-its preset mode as the status and labels its PM2.5 air-quality reading as `PM25`
-for legibility; that value is fine particulate matter measured in `µg/m³`.
+debounced rendering path as the existing status sources. The purifier uses the
+standard card layout with a short `AIR` label and a PM2.5 reading, which is fine
+particulate matter measured in `µg/m³`.
 
 When a washer, dryer, dishwasher, BroomBot, or MopBot transitions from active
 to finished, the front shows a ten-second `DONE` card. Simultaneous completions
 are queued in device order. If BUSY Bar audio is enabled, each completion also
 plays the configured stock sound. Initial snapshots establish a baseline and
 never produce false completion alerts. The air purifier is displayed while its
-fan is on but does not generate a completion alert.
+fan is on, appears only once per full rotation, and does not generate a
+completion alert.
 
 ## Rear display
 
