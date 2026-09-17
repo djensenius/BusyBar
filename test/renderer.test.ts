@@ -671,9 +671,13 @@ describe("monitor renderer", () => {
       now,
     ).payload;
     expect(textsFor(carRangePayload, "front")).toEqual(["RANGE", "356 KM", "78%"]);
+    expect(carRangePayload.elements[0]).toMatchObject({
+      fill_colors: ["#003B7AFF", "#4C1D95FF"],
+    });
     expect(
       frontTextElements(carRangePayload).find((element) => element.text === "78%"),
     ).toMatchObject({
+      color: "#67E8F9FF",
       font: "condensed",
       width: 19,
     });
@@ -733,6 +737,39 @@ describe("monitor renderer", () => {
       y: 8,
       width: 19,
     });
+  });
+
+  it("renders purifier state when the PM2.5 reading rounds to zero", () => {
+    const purifierSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "airPurifier",
+          name: "Air purifier",
+          active: true,
+          lifecycle: "active",
+          status: "auto",
+          detail: null,
+          progressPercent: 42,
+          airQualityPm25: 0.4,
+          remainingSeconds: null,
+          elapsedSeconds: null,
+          batteryPercent: null,
+          updatedAt: new Date(now - 1_000).toISOString(),
+        },
+      ],
+    };
+    const payload = renderMonitor(
+      model({
+        frontFrame: "fluxhausAirPurifier",
+        fluxHaus: purifierSnapshot,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    ).payload;
+
+    expect(textsFor(payload, "front")).toEqual(["AIR", "AUTO", "42%"]);
   });
 
   it("renders robot elapsed time when battery is unavailable", () => {

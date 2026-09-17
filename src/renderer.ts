@@ -1469,8 +1469,8 @@ export const fluxHausPalette = (
       };
     case "car":
       return {
-        background: [COLORS.slateDark, COLORS.amberDark],
-        icon: "#FACC15FF",
+        background: [COLORS.blueDark, COLORS.violetDark],
+        icon: "#67E8F9FF",
       };
     case "complete":
       return {
@@ -1581,15 +1581,17 @@ const fluxHausPresentation = (
   }
   if (device.id === "airPurifier") {
     const pm25 = device.airQualityPm25;
+    const roundedPm25 = pm25 === null || pm25 === undefined ? null : Math.round(pm25);
+    const showPm25 = roundedPm25 !== null && roundedPm25 !== 0;
     return fluxHausCard(
       device.id,
       "AIR",
-      pm25 === null || pm25 === undefined ? device.status.toUpperCase() : "PM2.5",
-      pm25 === null || pm25 === undefined
-        ? device.progressPercent === null
+      showPm25 ? "PM2.5" : device.status.toUpperCase(),
+      showPm25
+        ? String(roundedPm25)
+        : device.progressPercent === null
           ? "ON"
-          : `${Math.round(device.progressPercent)}%`
-        : String(Math.round(pm25)),
+          : `${Math.round(device.progressPercent)}%`,
       fluxHausPalette(device.id),
       dark,
     );

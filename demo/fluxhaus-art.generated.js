@@ -579,77 +579,77 @@ globalThis.FLUX_HAUS_ART = {
         "y": 6,
         "width": 9,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 2,
         "y": 8,
         "width": 14,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 1,
         "y": 9,
         "width": 1,
         "height": 3,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 16,
         "y": 9,
         "width": 1,
         "height": 3,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 2,
         "y": 12,
         "width": 14,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 5,
         "y": 5,
         "width": 7,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 4,
         "y": 7,
         "width": 1,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 13,
         "y": 7,
         "width": 1,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 4,
         "y": 11,
         "width": 3,
         "height": 3,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 12,
         "y": 11,
         "width": 3,
         "height": 3,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 7,
         "y": 7,
         "width": 4,
         "height": 1,
-        "color": "#FACC15FF"
+        "color": "#67E8F9FF"
       },
       {
         "x": 5,
@@ -784,10 +784,10 @@ globalThis.FLUX_HAUS_ART = {
     },
     "car": {
       "background": [
-        "#101827FF",
-        "#865B00FF"
+        "#003B7AFF",
+        "#4C1D95FF"
       ],
-      "icon": "#FACC15FF"
+      "icon": "#67E8F9FF"
     },
     "complete": {
       "background": [
