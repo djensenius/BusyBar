@@ -85,8 +85,9 @@ Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
 FluxHaus cards use device-specific pixel art and update through the same
 debounced rendering path as the existing status sources. The purifier uses the
-standard card layout with a short `AIR` label and a PM2.5 reading, which is fine
-particulate matter measured in `µg/m³`.
+standard card layout with a short `AIR` label and a positive PM2.5 reading,
+which is fine particulate matter measured in `µg/m³`. A reading that rounds to
+zero falls back to the purifier state and fan percentage.
 
 When a washer, dryer, dishwasher, BroomBot, or MopBot transitions from active
 to finished, the front shows a ten-second `DONE` card. Simultaneous completions
