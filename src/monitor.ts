@@ -204,15 +204,18 @@ export class Monitor {
   #smartHomeActionPending = false;
   #smartHomeRefreshing = false;
   #smartHomeRefreshQueued = false;
+  readonly #resolveLocalUrl: (() => Promise<string>) | null;
 
   constructor(
     config: Extract<MonitorConfig, { enabled: true }>,
     client: BusyBarDeviceClient,
     homeAssistant: HomeAssistantSceneClient | null = null,
+    resolveLocalUrl: (() => Promise<string>) | null = null,
   ) {
     this.#config = config;
     this.#client = client;
     this.#homeAssistant = homeAssistant;
+    this.#resolveLocalUrl = resolveLocalUrl;
   }
 
   async start(): Promise<void> {
@@ -232,6 +235,7 @@ export class Monitor {
         onError: (error) => {
           log.warn({ err: error }, "BUSY Bar input stream failed");
         },
+        ...(this.#resolveLocalUrl ? { resolveUrl: this.#resolveLocalUrl } : {}),
       });
     } else {
       log.warn(

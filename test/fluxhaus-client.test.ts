@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { FluxHausConfig } from "../src/config.js";
 import {
+  formatApplianceDisplayText,
   parseFluxHausSnapshot,
   readFluxHausSnapshot,
   startFluxHausPolling,
@@ -186,6 +187,15 @@ describe("FluxHaus client", () => {
     });
   });
 
+  it("humanizes identifier-style appliance text without changing display names", () => {
+    expect(formatApplianceDisplayText("main_wash")).toBe("Main Wash");
+    expect(formatApplianceDisplayText("main_wash (normal)")).toBe("Main Wash (Normal)");
+    expect(formatApplianceDisplayText("QuickWash45")).toBe("QuickWash45");
+    expect(formatApplianceDisplayText("End programmed")).toBe("End programmed");
+    expect(formatApplianceDisplayText("i-DOS")).toBe("i-DOS");
+    expect(formatApplianceDisplayText("OFF")).toBe("Off");
+  });
+
   it("keeps paused and incomplete running telemetry non-terminal", () => {
     const snapshot = parseFluxHausSnapshot({
       timestamp: "2026-09-12T17:00:00.000Z",
@@ -215,7 +225,7 @@ describe("FluxHaus client", () => {
     const snapshot = parseFluxHausSnapshot({
       timestamp: "2026-09-12T17:00:00.000Z",
       washer: {
-        status: "Waiting to start",
+        status: "waiting_to_start",
         inUse: true,
         timeRemaining: 30,
       },
@@ -226,7 +236,12 @@ describe("FluxHaus client", () => {
     });
 
     expect(snapshot.devices).toMatchObject([
-      { id: "washer", active: false, lifecycle: "unknown" },
+      {
+        id: "washer",
+        active: false,
+        lifecycle: "unknown",
+        status: "Waiting To Start",
+      },
       { id: "broombot", active: false, lifecycle: "unknown", status: "Unknown" },
     ]);
   });
@@ -244,6 +259,23 @@ describe("FluxHaus client", () => {
       id: "dishwasher",
       active: false,
       lifecycle: "unknown",
+    });
+  });
+
+  it("normalizes dishwasher operation states before lifecycle classification", () => {
+    expect(
+      parseFluxHausSnapshot({
+        timestamp: "2026-09-12T17:00:00.000Z",
+        dishwasher: {
+          operationState: "run",
+          programProgress: 50,
+        },
+      }).devices[0],
+    ).toMatchObject({
+      id: "dishwasher",
+      active: true,
+      lifecycle: "active",
+      status: "Running",
     });
   });
 

@@ -158,15 +158,36 @@ const normalizeText = (value: string | null | undefined): string | null => {
   return normalized ? normalized : null;
 };
 
+export const formatApplianceDisplayText = (
+  value: string | null | undefined,
+): string | null => {
+  const trimmed = normalizeText(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+  if (!trimmed.includes("_") && /[A-Z]/.test(normalized) && /[a-z]/.test(normalized)) {
+    return normalized;
+  }
+  return normalized.replace(
+    /[A-Za-z]+/g,
+    (word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`,
+  );
+};
+
 const normalizeMiele = (
   id: "washer" | "dryer",
   name: string,
   device: z.infer<typeof MieleDeviceSchema>,
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
-  const delayed = device.status === "Programmed" || device.status === "Waiting to start";
-  const paused = device.status === "Pause";
-  const finished = device.status === "End programmed";
+  const status = formatApplianceDisplayText(device.status) ?? (device.inUse ? "In use" : "Off");
+  const normalizedStatus = status.toLowerCase();
+  const delayed =
+    normalizedStatus === "programmed" ||
+    normalizedStatus === "waiting to start" ||
+    normalizedStatus === "delayed start";
+  const paused = normalizedStatus === "pause" || normalizedStatus === "paused";
+  const finished =
+    normalizedStatus === "end programmed" || normalizedStatus === "program ended";
   const remainingMinutes = device.timeRemaining ?? null;
   const active = !delayed && !paused && !finished && (remainingMinutes ?? 0) > 0;
   const elapsedMinutes = device.timeRunning ?? null;
@@ -186,11 +207,13 @@ const normalizeMiele = (
           ? "unknown"
           : active
             ? "active"
-            : device.status === "Off" || device.status === "Not Connected"
+            : normalizedStatus === "off" || normalizedStatus === "not connected"
               ? "inactive"
               : "unknown",
-    status: normalizeText(device.status) ?? (device.inUse ? "In use" : "Off"),
-    detail: normalizeText(device.step) ?? normalizeText(device.programName),
+    status,
+    detail:
+      formatApplianceDisplayText(device.step) ??
+      formatApplianceDisplayText(device.programName),
     progressPercent:
       totalMinutes !== null && totalMinutes > 0 && elapsedMinutes !== null
         ? clampPercent((elapsedMinutes / totalMinutes) * 100)
@@ -216,17 +239,32 @@ const normalizeDishwasher = (
   device: z.infer<typeof DishwasherSchema>,
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
-  const active = device.operationState === "Run" && (device.programProgress ?? 0) > 0;
+  const operationStateKey = (normalizeText(device.operationState) ?? "")
+    .replace(/[^A-Za-z]/g, "")
+    .toLowerCase();
+  const operationStateDisplay =
+    {
+      inactive: "Inactive",
+      ready: "Ready",
+      delayedstart: "Delayed Start",
+      run: "Running",
+      pause: "Paused",
+      actionrequired: "Action Required",
+      finished: "Finished",
+      error: "Error",
+      aborting: "Aborting",
+    }[operationStateKey] ?? formatApplianceDisplayText(device.operationState);
+  const active = operationStateKey === "run" && (device.programProgress ?? 0) > 0;
   const lifecycle: FluxHausDeviceLifecycle =
     active
       ? "active"
-      : device.operationState === "Pause"
+      : operationStateKey === "pause"
         ? "paused"
-        : device.operationState === "Finished"
+        : operationStateKey === "finished"
           ? "finished"
-          : device.operationState === "Run"
+          : operationStateKey === "run"
             ? "unknown"
-            : device.operationState === "Inactive"
+            : operationStateKey === "inactive"
               ? "inactive"
               : "unknown";
   return {
@@ -234,8 +272,13 @@ const normalizeDishwasher = (
     name: "Dishwasher",
     active: lifecycle === "active",
     lifecycle,
-    status: normalizeText(device.status) ?? normalizeText(device.operationState) ?? "Inactive",
-    detail: normalizeText(device.activeProgram) ?? normalizeText(device.selectedProgram),
+    status:
+      formatApplianceDisplayText(device.status) ??
+      operationStateDisplay ??
+      "Inactive",
+    detail:
+      formatApplianceDisplayText(device.activeProgram) ??
+      formatApplianceDisplayText(device.selectedProgram),
     progressPercent: clampPercent(device.programProgress),
     remainingSeconds: secondsFor(device.remainingTime, device.remainingTimeUnit),
     elapsedSeconds: null,

@@ -14,6 +14,7 @@ interface BusyBarInputStreamOptions {
   onStatus(connected: boolean): void;
   onError(error: Error): void;
   heartbeatIntervalMs?: number;
+  resolveUrl?: () => Promise<string>;
 }
 
 const INPUT_HEARTBEAT_INTERVAL_MS = 15_000;
@@ -163,6 +164,7 @@ export const startBusyBarInputStream = (
   let retry: NodeJS.Timeout | null = null;
   let heartbeat: NodeJS.Timeout | null = null;
   let stopped = false;
+  let connecting = false;
   let attempt = 0;
 
   const clearHeartbeat = (): void => {
@@ -176,16 +178,44 @@ export const startBusyBarInputStream = (
     attempt += 1;
     retry = setTimeout(() => {
       retry = null;
-      connect();
+      void connect();
     }, delay);
     retry.unref();
   };
 
-  const connect = (): void => {
-    if (stopped) return;
-    const current = new WebSocket(
-      busyBarInputWebSocketUrl(options.url, options.accessKey),
-    );
+  const connect = async (): Promise<void> => {
+    if (stopped || connecting || socket) return;
+    connecting = true;
+    let url = options.url;
+    try {
+      url = (await options.resolveUrl?.()) ?? url;
+    } catch (error) {
+      connecting = false;
+      options.onError(
+        error instanceof Error ? error : new Error("BUSY Bar input address resolution failed"),
+      );
+      reconnect();
+      return;
+    }
+    if (stopped) {
+      connecting = false;
+      return;
+    }
+
+    let current: WebSocket;
+    try {
+      current = new WebSocket(
+        busyBarInputWebSocketUrl(url, options.accessKey),
+      );
+    } catch (error) {
+      connecting = false;
+      options.onError(
+        error instanceof Error ? error : new Error("BUSY Bar input connection failed"),
+      );
+      reconnect();
+      return;
+    }
+    connecting = false;
     let awaitingPong = false;
     socket = current;
     current.on("open", () => {
@@ -247,7 +277,7 @@ export const startBusyBarInputStream = (
     });
   };
 
-  connect();
+  void connect();
   return {
     stop(): void {
       stopped = true;

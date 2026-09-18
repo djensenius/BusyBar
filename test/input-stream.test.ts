@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { WebSocketServer } from "ws";
 import {
   busyBarInputWebSocketUrl,
@@ -51,6 +51,42 @@ describe("BUSY Bar input protobuf decoder", () => {
     expect(busyBarInputWebSocketUrl("http://192.168.1.247", "1234567890")).toBe(
       "ws://192.168.1.247/api/status/ws?x-api-token=1234567890",
     );
+  });
+
+  it("resolves the current local address before connecting", async () => {
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    await new Promise<void>((resolve, reject) => {
+      server.once("listening", resolve);
+      server.once("error", reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing WebSocket address");
+
+    const connected = new Promise<void>((resolve) => {
+      server.once("connection", () => resolve());
+    });
+    const resolveUrl = vi.fn(() =>
+      Promise.resolve(`http://127.0.0.1:${address.port}`),
+    );
+    const handle = startBusyBarInputStream({
+      url: "http://192.0.2.1",
+      accessKey: "1234",
+      resolveUrl,
+      onInput: () => undefined,
+      onStatus: () => undefined,
+      onError: () => undefined,
+    });
+
+    try {
+      await connected;
+      expect(resolveUrl).toHaveBeenCalledOnce();
+    } finally {
+      handle.stop();
+      for (const client of server.clients) client.terminate();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 
   it("disconnects a half-open input stream", async () => {
