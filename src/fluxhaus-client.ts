@@ -164,7 +164,7 @@ export const formatApplianceDisplayText = (
   const trimmed = normalizeText(value);
   if (!trimmed) return null;
   const normalized = trimmed.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
-  if (!trimmed.includes("_") && /[A-Z]/.test(normalized)) {
+  if (!trimmed.includes("_") && /[A-Z]/.test(normalized) && /[a-z]/.test(normalized)) {
     return normalized;
   }
   return normalized.replace(
@@ -239,17 +239,32 @@ const normalizeDishwasher = (
   device: z.infer<typeof DishwasherSchema>,
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
-  const active = device.operationState === "Run" && (device.programProgress ?? 0) > 0;
+  const operationStateKey = (normalizeText(device.operationState) ?? "")
+    .replace(/[^A-Za-z]/g, "")
+    .toLowerCase();
+  const operationStateDisplay =
+    {
+      inactive: "Inactive",
+      ready: "Ready",
+      delayedstart: "Delayed Start",
+      run: "Running",
+      pause: "Paused",
+      actionrequired: "Action Required",
+      finished: "Finished",
+      error: "Error",
+      aborting: "Aborting",
+    }[operationStateKey] ?? formatApplianceDisplayText(device.operationState);
+  const active = operationStateKey === "run" && (device.programProgress ?? 0) > 0;
   const lifecycle: FluxHausDeviceLifecycle =
     active
       ? "active"
-      : device.operationState === "Pause"
+      : operationStateKey === "pause"
         ? "paused"
-        : device.operationState === "Finished"
+        : operationStateKey === "finished"
           ? "finished"
-          : device.operationState === "Run"
+          : operationStateKey === "run"
             ? "unknown"
-            : device.operationState === "Inactive"
+            : operationStateKey === "inactive"
               ? "inactive"
               : "unknown";
   return {
@@ -259,7 +274,7 @@ const normalizeDishwasher = (
     lifecycle,
     status:
       formatApplianceDisplayText(device.status) ??
-      formatApplianceDisplayText(device.operationState) ??
+      operationStateDisplay ??
       "Inactive",
     detail:
       formatApplianceDisplayText(device.activeProgram) ??

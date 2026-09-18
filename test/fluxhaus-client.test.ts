@@ -193,6 +193,7 @@ describe("FluxHaus client", () => {
     expect(formatApplianceDisplayText("QuickWash45")).toBe("QuickWash45");
     expect(formatApplianceDisplayText("End programmed")).toBe("End programmed");
     expect(formatApplianceDisplayText("i-DOS")).toBe("i-DOS");
+    expect(formatApplianceDisplayText("OFF")).toBe("Off");
   });
 
   it("keeps paused and incomplete running telemetry non-terminal", () => {
@@ -258,6 +259,23 @@ describe("FluxHaus client", () => {
       id: "dishwasher",
       active: false,
       lifecycle: "unknown",
+    });
+  });
+
+  it("normalizes dishwasher operation states before lifecycle classification", () => {
+    expect(
+      parseFluxHausSnapshot({
+        timestamp: "2026-09-12T17:00:00.000Z",
+        dishwasher: {
+          operationState: "run",
+          programProgress: 50,
+        },
+      }).devices[0],
+    ).toMatchObject({
+      id: "dishwasher",
+      active: true,
+      lifecycle: "active",
+      status: "Running",
     });
   });
 
