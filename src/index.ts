@@ -1,4 +1,7 @@
-import { createBusyBarDeviceClient } from "./busy-client.js";
+import {
+  createBusyBarDeviceClient,
+  createBusyBarLocalUrlResolver,
+} from "./busy-client.js";
 import { resolveConfig } from "./config.js";
 import { createHomeAssistantSceneClient } from "./home-assistant-client.js";
 import { startFluxHausPolling } from "./fluxhaus-client.js";
@@ -32,37 +35,44 @@ export const start = async (): Promise<void> => {
     return;
   }
 
+  const resolveLocalUrl = createBusyBarLocalUrlResolver(config);
+  const localUrl = await resolveLocalUrl?.();
+  const runtimeConfig =
+    localUrl && localUrl !== config.localUrl ? { ...config, localUrl } : config;
   const monitor = new Monitor(
-    config,
-    createBusyBarDeviceClient(config),
-    config.homeAssistant ? createHomeAssistantSceneClient(config.homeAssistant) : null,
+    runtimeConfig,
+    createBusyBarDeviceClient(runtimeConfig),
+    runtimeConfig.homeAssistant
+      ? createHomeAssistantSceneClient(runtimeConfig.homeAssistant)
+      : null,
+    resolveLocalUrl,
   );
   await monitor.start();
 
   const stream = startOperatorStream(
-    config.operatorApiUrl,
-    config.operatorToken,
-    config.boothId,
+    runtimeConfig.operatorApiUrl,
+    runtimeConfig.operatorToken,
+    runtimeConfig.boothId,
     monitor,
   );
   const polling = startOperatorPolling(
-    config.operatorApiUrl,
-    config.operatorToken,
-    config.boothId,
+    runtimeConfig.operatorApiUrl,
+    runtimeConfig.operatorToken,
+    runtimeConfig.boothId,
     monitor,
   );
   const summaryPolling = startSummaryPolling(
-    config.operatorApiUrl,
-    config.operatorToken,
-    config.timeZone,
-    config.summaryPollIntervalMs,
+    runtimeConfig.operatorApiUrl,
+    runtimeConfig.operatorToken,
+    runtimeConfig.timeZone,
+    runtimeConfig.summaryPollIntervalMs,
     monitor,
   );
-  const weatherPolling = config.weather
-    ? startHomeAssistantWeatherPolling(config.weather, monitor)
+  const weatherPolling = runtimeConfig.weather
+    ? startHomeAssistantWeatherPolling(runtimeConfig.weather, monitor)
     : null;
-  const fluxHausPolling = config.fluxHaus
-    ? startFluxHausPolling(config.fluxHaus, monitor)
+  const fluxHausPolling = runtimeConfig.fluxHaus
+    ? startFluxHausPolling(runtimeConfig.fluxHaus, monitor)
     : null;
 
   let stopping = false;

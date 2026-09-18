@@ -158,6 +158,23 @@ const normalizeText = (value: string | null | undefined): string | null => {
   return normalized ? normalized : null;
 };
 
+export const formatApplianceDisplayText = (
+  value: string | null | undefined,
+): string | null => {
+  const trimmed = normalizeText(value);
+  if (!trimmed) return null;
+
+  const normalized = trimmed.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+  const firstLetter = normalized.match(/[A-Za-z]/)?.[0];
+  if (!trimmed.includes("_") && firstLetter && firstLetter === firstLetter.toUpperCase()) {
+    return normalized;
+  }
+  return normalized.replace(
+    /[A-Za-z]+/g,
+    (word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`,
+  );
+};
+
 const normalizeMiele = (
   id: "washer" | "dryer",
   name: string,
@@ -189,8 +206,10 @@ const normalizeMiele = (
             : device.status === "Off" || device.status === "Not Connected"
               ? "inactive"
               : "unknown",
-    status: normalizeText(device.status) ?? (device.inUse ? "In use" : "Off"),
-    detail: normalizeText(device.step) ?? normalizeText(device.programName),
+    status: formatApplianceDisplayText(device.status) ?? (device.inUse ? "In use" : "Off"),
+    detail:
+      formatApplianceDisplayText(device.step) ??
+      formatApplianceDisplayText(device.programName),
     progressPercent:
       totalMinutes !== null && totalMinutes > 0 && elapsedMinutes !== null
         ? clampPercent((elapsedMinutes / totalMinutes) * 100)
@@ -234,8 +253,13 @@ const normalizeDishwasher = (
     name: "Dishwasher",
     active: lifecycle === "active",
     lifecycle,
-    status: normalizeText(device.status) ?? normalizeText(device.operationState) ?? "Inactive",
-    detail: normalizeText(device.activeProgram) ?? normalizeText(device.selectedProgram),
+    status:
+      formatApplianceDisplayText(device.status) ??
+      formatApplianceDisplayText(device.operationState) ??
+      "Inactive",
+    detail:
+      formatApplianceDisplayText(device.activeProgram) ??
+      formatApplianceDisplayText(device.selectedProgram),
     progressPercent: clampPercent(device.programProgress),
     remainingSeconds: secondsFor(device.remainingTime, device.remainingTimeUnit),
     elapsedSeconds: null,

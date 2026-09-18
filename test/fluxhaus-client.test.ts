@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { FluxHausConfig } from "../src/config.js";
 import {
+  formatApplianceDisplayText,
   parseFluxHausSnapshot,
   readFluxHausSnapshot,
   startFluxHausPolling,
@@ -184,6 +185,13 @@ describe("FluxHaus client", () => {
       car: null,
       generatedAt: "2026-09-12T17:00:00.000Z",
     });
+  });
+
+  it("humanizes identifier-style appliance text without changing display names", () => {
+    expect(formatApplianceDisplayText("main_wash")).toBe("Main Wash");
+    expect(formatApplianceDisplayText("main_wash (normal)")).toBe("Main Wash (Normal)");
+    expect(formatApplianceDisplayText("QuickWash45")).toBe("QuickWash45");
+    expect(formatApplianceDisplayText("End programmed")).toBe("End programmed");
   });
 
   it("keeps paused and incomplete running telemetry non-terminal", () => {

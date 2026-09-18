@@ -20,6 +20,7 @@ import type {
   FluxHausDeviceStatus,
   FluxHausSnapshot,
 } from "./fluxhaus-client.js";
+import { formatApplianceDisplayText } from "./fluxhaus-client.js";
 import type {
   BoothFanStats,
   BoothState,
@@ -1417,6 +1418,14 @@ const compactAge = (timestamp: string, nowMs: number): string => {
   return days > 99 ? "99D+" : `${days}D`;
 };
 
+const compactFluxHausDetail = (device: FluxHausDeviceStatus): string => {
+  const detail = formatApplianceDisplayText(device.detail ?? device.status) ?? device.status;
+  const isAppliance =
+    device.id === "washer" || device.id === "dryer" || device.id === "dishwasher";
+  if (!isAppliance || detail.length <= 8) return detail;
+  return detail.split(/\s+/, 1)[0] ?? detail;
+};
+
 const fluxHausDeviceForFrame = (
   frame: FrontFrame,
   snapshot: FluxHausSnapshot | null,
@@ -1615,7 +1624,7 @@ const fluxHausPresentation = (
   return fluxHausCard(
     device.id,
     titleById[device.id],
-    (device.detail ?? device.status).toUpperCase(),
+    compactFluxHausDetail(device).toUpperCase(),
     value,
     fluxHausPalette(device.id),
     dark,

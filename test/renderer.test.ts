@@ -697,6 +697,33 @@ describe("monitor renderer", () => {
     ).toEqual(["UPDATED", "12M AGO", "78%"]);
   });
 
+  it("uses compact human-readable appliance phases", () => {
+    const mainWash: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          ...fluxHaus.devices[0]!,
+          detail: "main_wash",
+        },
+      ],
+    };
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausWasher",
+            fluxHaus: mainWash,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["WASHER", "MAIN", "38M"]);
+  });
+
   it("renders purifier air quality with the standard card layout", () => {
     const purifierSnapshot: FluxHausSnapshot = {
       ...fluxHaus,
@@ -832,7 +859,7 @@ describe("monitor renderer", () => {
 
     expect(visibleTexts.map((element) => element.text)).toEqual([
       "WASHER",
-      "AUTOMATIC DELICATE",
+      "AUTOMATIC",
       "99H+",
     ]);
     expect(visibleTexts.map((element) => element.width)).toEqual([32, 32, 19]);

@@ -1,5 +1,6 @@
 import { BusyBar } from "@busy-app/busy-lib";
 import type { BusyBarConfig, DisplayDrawParams } from "@busy-app/busy-lib";
+import { isIP } from "node:net";
 import type { MonitorConfig } from "./config.js";
 import { log } from "./logger.js";
 
@@ -25,6 +26,8 @@ interface NamedBusyBarDeviceClient {
   client: BusyBarDeviceClient;
 }
 
+type BusyBarWifiAddressLoader = (config: BusyBarConfig) => Promise<string | null>;
+
 export const busyBarConnectionConfigs = (
   config: BusyBarConnectionSource,
 ): BusyBarConnectionConfigs => ({
@@ -42,6 +45,41 @@ export const busyBarConnectionConfigs = (
         }
       : null,
 });
+
+const loadBusyBarWifiAddress: BusyBarWifiAddressLoader = async (config) => {
+  const wifi = await new BusyBar(config).WifiStatusGet();
+  return wifi.state === "connected" ? (wifi.ip_config?.address?.trim() ?? null) : null;
+};
+
+export const createBusyBarLocalUrlResolver = (
+  config: BusyBarConnectionSource,
+  loadWifiAddress: BusyBarWifiAddressLoader = loadBusyBarWifiAddress,
+): (() => Promise<string>) | null => {
+  if (!config.localUrl || !config.localAccessKey) return null;
+  if (isIP(new URL(config.localUrl).hostname) !== 4) return null;
+  const cloudConfig = busyBarConnectionConfigs(config).cloud;
+  let currentUrl = config.localUrl;
+
+  return async (): Promise<string> => {
+    try {
+      const address = await loadWifiAddress(cloudConfig);
+      if (!address || isIP(address) !== 4) return currentUrl;
+
+      const resolved = new URL(currentUrl);
+      if (resolved.hostname === address) return currentUrl;
+      const hadTrailingSlash = currentUrl.endsWith("/");
+      resolved.hostname = address;
+      currentUrl = hadTrailingSlash ? resolved.toString() : resolved.toString().replace(/\/$/, "");
+      log.info("BUSY Bar local address refreshed from cloud");
+    } catch (error) {
+      log.warn(
+        { err: error },
+        "BUSY Bar local address discovery failed; keeping the last known address",
+      );
+    }
+    return currentUrl;
+  };
+};
 
 const deviceClientForBar = (bar: BusyBar): BusyBarDeviceClient => ({
   async draw(payload: DisplayDrawParams): Promise<void> {

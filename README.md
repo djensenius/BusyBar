@@ -157,7 +157,10 @@ Telephone Booth counters, and the full carousel. Active booth states and health
 warnings continue to override the selected idle mode.
 
 The local connection also keeps display updates available during BUSY Cloud
-errors and uses a WebSocket heartbeat to reconnect stalled input streams.
+errors and uses a WebSocket heartbeat to reconnect stalled input streams. At
+startup and before each reconnect, the monitor refreshes a configured IPv4
+LAN address from the BUSY Cloud Wi-Fi status so DHCP address changes do not
+silently disable the controls.
 
 The Start/Pause button and dial press can activate Home Assistant scenes with
 `BUSY_BAR_START_SCENE_ID` and `BUSY_BAR_DIAL_SCENE_ID`. Both trigger only on

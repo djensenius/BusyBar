@@ -3,6 +3,7 @@ import type { BusyBarDeviceClient } from "../src/busy-client.js";
 import {
   busyBarConnectionConfigs,
   createFailoverBusyBarDeviceClient,
+  createBusyBarLocalUrlResolver,
 } from "../src/busy-client.js";
 
 const createClient = (): BusyBarDeviceClient & {
@@ -54,5 +55,42 @@ describe("BUSY Bar device client", () => {
     expect(local.clear).toHaveBeenCalledTimes(1);
     expect(cloud.setBrightness).not.toHaveBeenCalled();
     expect(local.setBrightness).toHaveBeenCalledWith(5);
+  });
+
+  it("refreshes a stale local address from the cloud Wi-Fi status", async () => {
+    const loadWifiAddress = vi.fn(() => Promise.resolve("192.168.1.249"));
+    const resolveLocalUrl = createBusyBarLocalUrlResolver(
+      {
+        apiUrl: "https://api.busy.app",
+        token: "cloud-token",
+        localUrl: "http://192.168.1.247",
+        localAccessKey: "1234567890",
+      },
+      loadWifiAddress,
+    );
+
+    await expect(resolveLocalUrl?.()).resolves.toBe("http://192.168.1.249");
+    expect(loadWifiAddress).toHaveBeenCalledWith({
+      addr: "https://api.busy.app",
+      token: "cloud-token",
+      timeout: 5_000,
+    });
+  });
+
+  it("keeps stable local hostnames instead of replacing them with a cloud address", () => {
+    const loadWifiAddress = vi.fn(() => Promise.resolve("192.168.1.249"));
+
+    expect(
+      createBusyBarLocalUrlResolver(
+        {
+          apiUrl: "https://api.busy.app",
+          token: "cloud-token",
+          localUrl: "http://busybar.local",
+          localAccessKey: "1234567890",
+        },
+        loadWifiAddress,
+      ),
+    ).toBeNull();
+    expect(loadWifiAddress).not.toHaveBeenCalled();
   });
 });
