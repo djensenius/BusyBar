@@ -163,10 +163,8 @@ export const formatApplianceDisplayText = (
 ): string | null => {
   const trimmed = normalizeText(value);
   if (!trimmed) return null;
-
   const normalized = trimmed.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
-  const firstLetter = normalized.match(/[A-Za-z]/)?.[0];
-  if (!trimmed.includes("_") && firstLetter && firstLetter === firstLetter.toUpperCase()) {
+  if (!trimmed.includes("_") && /[A-Z]/.test(normalized)) {
     return normalized;
   }
   return normalized.replace(
@@ -181,9 +179,15 @@ const normalizeMiele = (
   device: z.infer<typeof MieleDeviceSchema>,
 ): FluxHausDeviceStatus | null => {
   if (!device) return null;
-  const delayed = device.status === "Programmed" || device.status === "Waiting to start";
-  const paused = device.status === "Pause";
-  const finished = device.status === "End programmed";
+  const status = formatApplianceDisplayText(device.status) ?? (device.inUse ? "In use" : "Off");
+  const normalizedStatus = status.toLowerCase();
+  const delayed =
+    normalizedStatus === "programmed" ||
+    normalizedStatus === "waiting to start" ||
+    normalizedStatus === "delayed start";
+  const paused = normalizedStatus === "pause" || normalizedStatus === "paused";
+  const finished =
+    normalizedStatus === "end programmed" || normalizedStatus === "program ended";
   const remainingMinutes = device.timeRemaining ?? null;
   const active = !delayed && !paused && !finished && (remainingMinutes ?? 0) > 0;
   const elapsedMinutes = device.timeRunning ?? null;
@@ -203,10 +207,10 @@ const normalizeMiele = (
           ? "unknown"
           : active
             ? "active"
-            : device.status === "Off" || device.status === "Not Connected"
+            : normalizedStatus === "off" || normalizedStatus === "not connected"
               ? "inactive"
               : "unknown",
-    status: formatApplianceDisplayText(device.status) ?? (device.inUse ? "In use" : "Off"),
+    status,
     detail:
       formatApplianceDisplayText(device.step) ??
       formatApplianceDisplayText(device.programName),

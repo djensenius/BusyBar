@@ -192,6 +192,7 @@ describe("FluxHaus client", () => {
     expect(formatApplianceDisplayText("main_wash (normal)")).toBe("Main Wash (Normal)");
     expect(formatApplianceDisplayText("QuickWash45")).toBe("QuickWash45");
     expect(formatApplianceDisplayText("End programmed")).toBe("End programmed");
+    expect(formatApplianceDisplayText("i-DOS")).toBe("i-DOS");
   });
 
   it("keeps paused and incomplete running telemetry non-terminal", () => {
@@ -223,7 +224,7 @@ describe("FluxHaus client", () => {
     const snapshot = parseFluxHausSnapshot({
       timestamp: "2026-09-12T17:00:00.000Z",
       washer: {
-        status: "Waiting to start",
+        status: "waiting_to_start",
         inUse: true,
         timeRemaining: 30,
       },
@@ -234,7 +235,12 @@ describe("FluxHaus client", () => {
     });
 
     expect(snapshot.devices).toMatchObject([
-      { id: "washer", active: false, lifecycle: "unknown" },
+      {
+        id: "washer",
+        active: false,
+        lifecycle: "unknown",
+        status: "Waiting To Start",
+      },
       { id: "broombot", active: false, lifecycle: "unknown", status: "Unknown" },
     ]);
   });
