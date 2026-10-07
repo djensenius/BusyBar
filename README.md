@@ -42,7 +42,7 @@ gradient cards:
   rotation
 - While FluxHaus equipment is active, the complete active group is inserted
   after every normal card in the full `all` mode. The group can include the
-  washer, dryer, dishwasher, BroomBot, and MopBot
+  washer, dryer, dishwasher, and Cleanbot
 - Any rendered `DAY` card with an explicit value of `0` is omitted
 - Unknown or missing pickup day totals still render as unavailable (`--`),
   while an absent `breakdownToday` block continues to hide the five breakout
@@ -89,7 +89,7 @@ standard card layout with a short `AIR` label and a positive PM2.5 reading,
 which is fine particulate matter measured in `µg/m³`. A reading that rounds to
 zero falls back to the purifier state and fan percentage.
 
-When a washer, dryer, dishwasher, BroomBot, or MopBot transitions from active
+When a washer, dryer, dishwasher, or Cleanbot transitions from active
 to finished, the front shows a ten-second `DONE` card. Simultaneous completions
 are queued in device order. If BUSY Bar audio is enabled, each completion also
 plays the configured stock sound. Initial snapshots establish a baseline and

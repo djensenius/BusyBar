@@ -799,13 +799,121 @@ describe("monitor renderer", () => {
     expect(textsFor(payload, "front")).toEqual(["AIR", "AUTO", "42%"]);
   });
 
+  it("renders Cleanbot remaining time before progress", () => {
+    const robotSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "cleanbot",
+          name: "Cleanbot",
+          active: true,
+          lifecycle: "active",
+          status: "Cleaning",
+          detail: "Kitchen",
+          progressPercent: 67,
+          remainingSeconds: 12 * 60,
+          elapsedSeconds: 34 * 60,
+          batteryPercent: 84,
+          updatedAt: new Date(now - 34 * 60_000).toISOString(),
+        },
+      ],
+    };
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausCleanbot",
+            fluxHaus: robotSnapshot,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["CLEAN", "KITCHEN", "12M"]);
+  });
+
+  it("renders Cleanbot progress before elapsed time or battery", () => {
+    const robotSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "cleanbot",
+          name: "Cleanbot",
+          active: true,
+          lifecycle: "active",
+          status: "Cleaning",
+          detail: "Kitchen",
+          progressPercent: 67,
+          remainingSeconds: null,
+          elapsedSeconds: 34 * 60,
+          batteryPercent: 84,
+          updatedAt: new Date(now - 34 * 60_000).toISOString(),
+        },
+      ],
+    };
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausCleanbot",
+            fluxHaus: robotSnapshot,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["CLEAN", "KITCHEN", "67%"]);
+  });
+
+  it("renders Cleanbot battery when richer telemetry is unavailable", () => {
+    const robotSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        {
+          id: "cleanbot",
+          name: "Cleanbot",
+          active: true,
+          lifecycle: "active",
+          status: "Cleaning",
+          detail: null,
+          progressPercent: null,
+          remainingSeconds: null,
+          elapsedSeconds: null,
+          batteryPercent: 84,
+          updatedAt: new Date(now - 15 * 60_000).toISOString(),
+        },
+      ],
+    };
+
+    expect(
+      textsFor(
+        renderMonitor(
+          model({
+            frontFrame: "fluxhausCleanbot",
+            fluxHaus: robotSnapshot,
+            fluxHausReceivedAtMs: now - 1_000,
+          }),
+          fluxHausEnabledConfig,
+          now,
+        ).payload,
+        "front",
+      ),
+    ).toEqual(["CLEAN", "CLEANING", "84%"]);
+  });
+
   it("renders robot elapsed time when battery is unavailable", () => {
     const robotSnapshot: FluxHausSnapshot = {
       ...fluxHaus,
       devices: [
         {
-          id: "broombot",
-          name: "BroomBot",
+          id: "cleanbot",
+          name: "Cleanbot",
           active: true,
           lifecycle: "active",
           status: "Cleaning",
@@ -823,7 +931,7 @@ describe("monitor renderer", () => {
       textsFor(
         renderMonitor(
           model({
-            frontFrame: "fluxhausBroombot",
+            frontFrame: "fluxhausCleanbot",
             fluxHaus: robotSnapshot,
             fluxHausReceivedAtMs: now - 1_000,
           }),
@@ -832,7 +940,7 @@ describe("monitor renderer", () => {
         ).payload,
         "front",
       ),
-    ).toEqual(["BROOM", "CLEANING", "15M"]);
+    ).toEqual(["CLEAN", "CLEANING", "15M"]);
   });
 
   it("bounds long FluxHaus labels and values to their card regions", () => {
@@ -914,6 +1022,44 @@ describe("monitor renderer", () => {
       "carRange",
       "carUpdated",
     ]);
+  });
+
+  it("repeats active Cleanbot with each active FluxHaus carousel group", () => {
+    const cleanbotSnapshot: FluxHausSnapshot = {
+      ...fluxHaus,
+      devices: [
+        ...fluxHaus.devices,
+        {
+          id: "cleanbot",
+          name: "Cleanbot",
+          active: true,
+          lifecycle: "active",
+          status: "Cleaning",
+          detail: "Kitchen",
+          progressPercent: 67,
+          remainingSeconds: 12 * 60,
+          elapsedSeconds: 34 * 60,
+          batteryPercent: 84,
+          updatedAt: new Date(now - 1_000).toISOString(),
+        },
+      ],
+    };
+    const frames = availableFrontFrames(
+      model({
+        summary,
+        system: null,
+        systemReceivedAtMs: null,
+        fluxHaus: cleanbotSnapshot,
+        fluxHausReceivedAtMs: now - 1_000,
+      }),
+      fluxHausEnabledConfig,
+      now,
+    );
+
+    expect(frames).toContain("fluxhausCleanbot");
+    expect(frames.filter((frame) => frame === "fluxhausCleanbot")).toHaveLength(
+      frames.filter((frame) => frame === "fluxhausWasher").length,
+    );
   });
 
   it("shows an active purifier once per all-mode rotation", () => {

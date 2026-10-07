@@ -98,8 +98,7 @@ export type FluxHausIcon =
   | "washer"
   | "dryer"
   | "dishwasher"
-  | "broombot"
-  | "mopbot"
+  | "cleanbot"
   | "airPurifier"
   | "car"
   | "complete";
@@ -160,7 +159,7 @@ export const fluxHausIconElements = (
     ];
   }
 
-  if (icon === "broombot" || icon === "mopbot") {
+  if (icon === "cleanbot") {
     return [
       panel,
       ...parts([
@@ -174,19 +173,10 @@ export const fluxHausIconElements = (
         [12, 11, 2, 1],
         [8, 5, 2, 2],
         [7, 9, 4, 1],
-        ...(icon === "mopbot"
-          ? ([
-              [8, 13, 2, 1],
-              [7, 14, 4, 1],
-              [1, 5, 1, 2],
-              [0, 7, 3, 2],
-            ] as const)
-          : ([
-              [1, 12, 4, 1],
-              [13, 12, 4, 1],
-              [2, 13, 1, 2],
-              [15, 13, 1, 2],
-            ] as const)),
+        [8, 13, 2, 1],
+        [7, 14, 4, 1],
+        [1, 12, 4, 1],
+        [13, 12, 4, 1],
       ]),
     ];
   }
