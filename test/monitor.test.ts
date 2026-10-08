@@ -127,7 +127,7 @@ const summaryWithZeroDailyCards = (): MonitorSummary => ({
 });
 
 const fluxHausSnapshot = (
-  active: Partial<Record<"washer" | "dryer", boolean>>,
+  active: Partial<Record<"washer" | "dryer" | "cleanbot", boolean>>,
 ): FluxHausSnapshot => ({
   generatedAt: new Date().toISOString(),
   devices: [
@@ -153,6 +153,19 @@ const fluxHausSnapshot = (
       progressPercent: active.dryer ? 40 : 100,
       remainingSeconds: active.dryer ? 44 * 60 : 0,
       batteryPercent: null,
+      updatedAt: null,
+    },
+    {
+      id: "cleanbot",
+      name: "Cleanbot",
+      active: active.cleanbot ?? false,
+      lifecycle: active.cleanbot ? "active" : "finished",
+      status: active.cleanbot ? "Cleaning" : "Docked",
+      detail: active.cleanbot ? "Kitchen" : null,
+      progressPercent: active.cleanbot ? 67 : 100,
+      remainingSeconds: active.cleanbot ? 12 * 60 : 0,
+      elapsedSeconds: active.cleanbot ? 34 * 60 : null,
+      batteryPercent: 84,
       updatedAt: null,
     },
   ],
@@ -699,6 +712,38 @@ describe("monitor lifecycle", () => {
       "DONE",
     ]);
     expect(client.playStockSound).toHaveBeenCalledTimes(2);
+    await monitor.stop();
+  });
+
+  it("queues Cleanbot completion alerts", async () => {
+    const client = createClient();
+    const monitor = new Monitor(
+      {
+        ...config,
+        audioEnabled: true,
+        alertSound: "notification",
+        fluxHaus: {
+          url: "https://haus.example.com",
+          username: "demo",
+          password: "secret",
+          pollIntervalMs: 10_000,
+          staleAfterMs: 120_000,
+        },
+      },
+      client,
+    );
+    monitor.updateStatus(status("idle"));
+    monitor.updateSystem(system());
+    await monitor.start();
+    monitor.updateFluxHaus(fluxHausSnapshot({ cleanbot: true }));
+    monitor.updateFluxHaus(fluxHausSnapshot({ cleanbot: false }));
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frontTexts(client.draw.mock.calls.at(-1)?.[0] as DisplayDrawParams)).toEqual([
+      "CLEANBOT",
+      "CYCLE",
+      "DONE",
+    ]);
     await monitor.stop();
   });
 

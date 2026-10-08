@@ -38,16 +38,10 @@ const payload = {
     operationState: "Run",
     activeProgram: "Eco50",
   },
-  broombot: {
+  cleanbot: {
     running: true,
     docking: false,
     batteryLevel: 84,
-    timestamp: "2026-09-12T16:59:55.000Z",
-  },
-  mopbot: {
-    running: false,
-    docking: true,
-    batteryLevel: 22,
     timestamp: "2026-09-12T16:59:55.000Z",
   },
   airPurifier: {
@@ -123,8 +117,8 @@ describe("FluxHaus client", () => {
           updatedAt: null,
         },
         {
-          id: "broombot",
-          name: "BroomBot",
+          id: "cleanbot",
+          name: "Cleanbot",
           active: true,
           lifecycle: "active",
           status: "Cleaning",
@@ -133,19 +127,6 @@ describe("FluxHaus client", () => {
           remainingSeconds: null,
           elapsedSeconds: null,
           batteryPercent: 84,
-          updatedAt: "2026-09-12T16:59:55.000Z",
-        },
-        {
-          id: "mopbot",
-          name: "MopBot",
-          active: true,
-          lifecycle: "active",
-          status: "Returning",
-          detail: null,
-          progressPercent: null,
-          remainingSeconds: null,
-          elapsedSeconds: null,
-          batteryPercent: 22,
           updatedAt: "2026-09-12T16:59:55.000Z",
         },
         {
@@ -206,7 +187,7 @@ describe("FluxHaus client", () => {
       dishwasher: {
         operationState: "Run",
       },
-      broombot: {
+      cleanbot: {
         running: false,
         paused: true,
         batteryLevel: 50,
@@ -217,7 +198,7 @@ describe("FluxHaus client", () => {
     expect(snapshot.devices).toMatchObject([
       { id: "washer", active: false, lifecycle: "unknown" },
       { id: "dishwasher", active: false, lifecycle: "unknown" },
-      { id: "broombot", active: false, lifecycle: "paused", status: "Paused" },
+      { id: "cleanbot", active: false, lifecycle: "paused", status: "Paused" },
     ]);
   });
 
@@ -229,7 +210,7 @@ describe("FluxHaus client", () => {
         inUse: true,
         timeRemaining: 30,
       },
-      broombot: {
+      cleanbot: {
         docking: false,
         batteryLevel: 50,
       },
@@ -242,7 +223,7 @@ describe("FluxHaus client", () => {
         lifecycle: "unknown",
         status: "Waiting To Start",
       },
-      { id: "broombot", active: false, lifecycle: "unknown", status: "Unknown" },
+      { id: "cleanbot", active: false, lifecycle: "unknown", status: "Unknown" },
     ]);
   });
 
@@ -292,12 +273,41 @@ describe("FluxHaus client", () => {
     });
   });
 
+  it("normalizes Cleanbot progress, room, remaining time, and elapsed time", () => {
+    expect(
+      parseFluxHausSnapshot(
+        {
+          timestamp: "2026-09-12T17:00:00.000Z",
+          cleanbot: {
+            running: true,
+            timeStarted: "2026-09-12T16:00:00.000Z",
+            progressPercent: 67,
+            estimatedRemainingMinutes: 12,
+            elapsedMinutes: 34,
+            currentRoom: "Kitchen",
+            batteryLevel: 84,
+            timestamp: "2026-09-12T16:59:55.000Z",
+          },
+        },
+        new Date("2026-09-12T17:00:00.000Z"),
+      ).devices[0],
+    ).toMatchObject({
+      id: "cleanbot",
+      active: true,
+      detail: "Kitchen",
+      progressPercent: 67,
+      remainingSeconds: 720,
+      elapsedSeconds: 2040,
+      batteryPercent: 84,
+    });
+  });
+
   it("preserves robot elapsed time when battery is unavailable", () => {
     expect(
       parseFluxHausSnapshot(
         {
           timestamp: "2026-09-12T17:00:00.000Z",
-          broombot: {
+          cleanbot: {
             running: true,
             timeStarted: "2026-09-12T16:45:00.000Z",
           },
@@ -305,7 +315,7 @@ describe("FluxHaus client", () => {
         new Date("2026-09-12T17:00:00.000Z"),
       ).devices[0],
     ).toMatchObject({
-      id: "broombot",
+      id: "cleanbot",
       active: true,
       elapsedSeconds: 900,
       batteryPercent: null,
@@ -331,7 +341,7 @@ describe("FluxHaus client", () => {
     expect(() =>
       parseFluxHausSnapshot({
         timestamp: "2026-09-12T17:00:00.000Z",
-        broombot: { running: true, batteryLevel: 101 },
+        cleanbot: { running: true, batteryLevel: 101 },
       }),
     ).toThrow();
   });

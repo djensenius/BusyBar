@@ -53,8 +53,7 @@ export type FrontFrame =
   | "fluxhausWasher"
   | "fluxhausDryer"
   | "fluxhausDishwasher"
-  | "fluxhausBroombot"
-  | "fluxhausMopbot"
+  | "fluxhausCleanbot"
   | "fluxhausAirPurifier"
   | "clock"
   | "weather";
@@ -487,8 +486,7 @@ export const availableFrontFrames = (
     washer: "fluxhausWasher",
     dryer: "fluxhausDryer",
     dishwasher: "fluxhausDishwasher",
-    broombot: "fluxhausBroombot",
-    mopbot: "fluxhausMopbot",
+    cleanbot: "fluxhausCleanbot",
     airPurifier: "fluxhausAirPurifier",
   };
   const activeFluxHausFrames: FrontFrame[] = fluxHausFresh
@@ -1434,8 +1432,7 @@ const fluxHausDeviceForFrame = (
     fluxhausWasher: "washer",
     fluxhausDryer: "dryer",
     fluxhausDishwasher: "dishwasher",
-    fluxhausBroombot: "broombot",
-    fluxhausMopbot: "mopbot",
+    fluxhausCleanbot: "cleanbot",
     fluxhausAirPurifier: "airPurifier",
   };
   const id = idByFrame[frame];
@@ -1461,15 +1458,10 @@ export const fluxHausPalette = (
         background: [COLORS.slateDark, COLORS.blueDark],
         icon: "#7DD3FCFF",
       };
-    case "broombot":
+    case "cleanbot":
       return {
-        background: [COLORS.greenDark, COLORS.green],
+        background: [COLORS.greenDark, COLORS.cyanDark],
         icon: "#73E895FF",
-      };
-    case "mopbot":
-      return {
-        background: [COLORS.blueDark, COLORS.cyanDark],
-        icon: "#5EEAD4FF",
       };
     case "airPurifier":
       return {
@@ -1609,18 +1601,22 @@ const fluxHausPresentation = (
     washer: "WASHER",
     dryer: "DRYER",
     dishwasher: "DISH",
-    broombot: "BROOM",
-    mopbot: "MOP",
+    cleanbot: "CLEAN",
     airPurifier: "AIR",
   };
   const value =
-    compactDuration(device.remainingSeconds) ??
-    compactDuration(device.elapsedSeconds ?? null) ??
-    (device.batteryPercent === null
-      ? device.progressPercent === null
-        ? "ON"
-        : `${Math.round(device.progressPercent)}%`
-      : `${Math.round(device.batteryPercent)}%`);
+    device.id === "cleanbot"
+      ? compactDuration(device.remainingSeconds) ??
+        (device.progressPercent === null ? null : `${Math.round(device.progressPercent)}%`) ??
+        compactDuration(device.elapsedSeconds ?? null) ??
+        (device.batteryPercent === null ? "ON" : `${Math.round(device.batteryPercent)}%`)
+      : compactDuration(device.remainingSeconds) ??
+        compactDuration(device.elapsedSeconds ?? null) ??
+        (device.batteryPercent === null
+          ? device.progressPercent === null
+            ? "ON"
+            : `${Math.round(device.progressPercent)}%`
+          : `${Math.round(device.batteryPercent)}%`);
   return fluxHausCard(
     device.id,
     titleById[device.id],
@@ -1985,8 +1981,7 @@ const idlePresentation = (
     frame === "fluxhausWasher" ||
     frame === "fluxhausDryer" ||
     frame === "fluxhausDishwasher" ||
-    frame === "fluxhausBroombot" ||
-    frame === "fluxhausMopbot" ||
+    frame === "fluxhausCleanbot" ||
     frame === "fluxhausAirPurifier"
   ) {
     return fluxHausPresentation(frame, state.fluxHaus, nowMs, dark);

@@ -6,8 +6,7 @@ export const FluxHausDeviceIdSchema = z.enum([
   "washer",
   "dryer",
   "dishwasher",
-  "broombot",
-  "mopbot",
+  "cleanbot",
   "airPurifier",
 ]);
 export type FluxHausDeviceId = z.infer<typeof FluxHausDeviceIdSchema>;
@@ -86,6 +85,11 @@ const RobotSchema = z
     charging: z.boolean().optional(),
     paused: z.boolean().optional(),
     batteryLevel: PercentSchema.optional(),
+    progressPercent: PercentSchema.optional(),
+    elapsedMinutes: FiniteNumberSchema.nonnegative().optional(),
+    estimatedRemainingMinutes: FiniteNumberSchema.nonnegative().optional(),
+    cleanedArea: FiniteNumberSchema.nonnegative().optional(),
+    currentRoom: z.string().max(128).optional(),
     timestamp: DateStringSchema,
     timeStarted: DateStringSchema,
   })
@@ -143,8 +147,7 @@ const FluxHausResponseSchema = z
     washer: MieleDeviceSchema,
     dryer: MieleDeviceSchema,
     dishwasher: DishwasherSchema,
-    broombot: RobotSchema,
-    mopbot: RobotSchema,
+    cleanbot: RobotSchema,
     airPurifier: AirPurifierSchema,
     carEvStatus: CarEvStatusSchema,
   })
@@ -288,7 +291,7 @@ const normalizeDishwasher = (
 };
 
 const normalizeRobot = (
-  id: "broombot" | "mopbot",
+  id: "cleanbot",
   name: string,
   device: z.infer<typeof RobotSchema>,
   now: Date,
@@ -327,13 +330,18 @@ const normalizeRobot = (
     active,
     lifecycle,
     status,
-    detail: null,
-    progressPercent: null,
-    remainingSeconds: null,
-    elapsedSeconds:
-      device.timeStarted == null
+    detail: device.currentRoom ?? null,
+    progressPercent: clampPercent(device.progressPercent),
+    remainingSeconds:
+      device.estimatedRemainingMinutes === undefined
         ? null
-        : Math.max(0, Math.round((now.getTime() - Date.parse(device.timeStarted)) / 1000)),
+        : Math.round(device.estimatedRemainingMinutes * 60),
+    elapsedSeconds:
+      device.elapsedMinutes !== undefined
+        ? Math.round(device.elapsedMinutes * 60)
+        : device.timeStarted == null
+          ? null
+          : Math.max(0, Math.round((now.getTime() - Date.parse(device.timeStarted)) / 1000)),
     batteryPercent: clampPercent(device.batteryLevel),
     updatedAt: device.timestamp ?? null,
   };
@@ -380,8 +388,7 @@ export const parseFluxHausSnapshot = (input: unknown, now = new Date()): FluxHau
     normalizeMiele("washer", "Washer", response.washer),
     normalizeMiele("dryer", "Dryer", response.dryer),
     normalizeDishwasher(response.dishwasher),
-    normalizeRobot("broombot", "BroomBot", response.broombot, now),
-    normalizeRobot("mopbot", "MopBot", response.mopbot, now),
+    normalizeRobot("cleanbot", "Cleanbot", response.cleanbot, now),
     normalizeAirPurifier(response.airPurifier),
   ].filter((device): device is FluxHausDeviceStatus => device !== null);
   return {

@@ -280,7 +280,7 @@ globalThis.FLUX_HAUS_ART = {
         "color": "#7DD3FCFF"
       }
     ],
-    "broombot": [
+    "cleanbot": [
       {
         "x": 0,
         "y": 0,
@@ -359,139 +359,32 @@ globalThis.FLUX_HAUS_ART = {
         "color": "#73E895FF"
       },
       {
-        "x": 1,
-        "y": 12,
-        "width": 4,
-        "height": 1,
-        "color": "#73E895FF"
-      },
-      {
-        "x": 13,
-        "y": 12,
-        "width": 4,
-        "height": 1,
-        "color": "#73E895FF"
-      },
-      {
-        "x": 2,
-        "y": 13,
-        "width": 1,
-        "height": 2,
-        "color": "#73E895FF"
-      },
-      {
-        "x": 15,
-        "y": 13,
-        "width": 1,
-        "height": 2,
-        "color": "#73E895FF"
-      }
-    ],
-    "mopbot": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 19,
-        "height": 16,
-        "color": "#05070BCC"
-      },
-      {
-        "x": 5,
-        "y": 3,
-        "width": 8,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 3,
-        "y": 5,
-        "width": 2,
-        "height": 6,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 13,
-        "y": 5,
-        "width": 2,
-        "height": 6,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 5,
-        "y": 12,
-        "width": 8,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 4,
-        "y": 4,
-        "width": 2,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 12,
-        "y": 4,
-        "width": 2,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 4,
-        "y": 11,
-        "width": 2,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 12,
-        "y": 11,
-        "width": 2,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 8,
-        "y": 5,
-        "width": 2,
-        "height": 2,
-        "color": "#5EEAD4FF"
-      },
-      {
-        "x": 7,
-        "y": 9,
-        "width": 4,
-        "height": 1,
-        "color": "#5EEAD4FF"
-      },
-      {
         "x": 8,
         "y": 13,
         "width": 2,
         "height": 1,
-        "color": "#5EEAD4FF"
+        "color": "#73E895FF"
       },
       {
         "x": 7,
         "y": 14,
         "width": 4,
         "height": 1,
-        "color": "#5EEAD4FF"
+        "color": "#73E895FF"
       },
       {
         "x": 1,
-        "y": 5,
-        "width": 1,
-        "height": 2,
-        "color": "#5EEAD4FF"
+        "y": 12,
+        "width": 4,
+        "height": 1,
+        "color": "#73E895FF"
       },
       {
-        "x": 0,
-        "y": 7,
-        "width": 3,
-        "height": 2,
-        "color": "#5EEAD4FF"
+        "x": 13,
+        "y": 12,
+        "width": 4,
+        "height": 1,
+        "color": "#73E895FF"
       }
     ],
     "airPurifier": [
@@ -761,19 +654,12 @@ globalThis.FLUX_HAUS_ART = {
       ],
       "icon": "#7DD3FCFF"
     },
-    "broombot": {
+    "cleanbot": {
       "background": [
         "#14532DFF",
-        "#30D158FF"
-      ],
-      "icon": "#73E895FF"
-    },
-    "mopbot": {
-      "background": [
-        "#003B7AFF",
         "#006A85FF"
       ],
-      "icon": "#5EEAD4FF"
+      "icon": "#73E895FF"
     },
     "airPurifier": {
       "background": [

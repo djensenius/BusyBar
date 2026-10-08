@@ -40,8 +40,7 @@ const COMPLETION_DEVICE_ORDER: readonly FluxHausDeviceId[] = [
   "washer",
   "dryer",
   "dishwasher",
-  "broombot",
-  "mopbot",
+  "cleanbot",
 ];
 
 export const nextBackPage = (page: BackPage, direction: number): BackPage =>
