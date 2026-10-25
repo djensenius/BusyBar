@@ -1666,6 +1666,30 @@ describe("monitor renderer", () => {
     expect(frontFillColors(nighttime).slice(0, 2)).toEqual(["#000000FF", "#000000FF"]);
   });
 
+  it.each([
+    { pwmRatio: 0.749, temperatureCelsius: 69.9, warning: false },
+    { pwmRatio: 0.75, temperatureCelsius: 45, warning: true },
+    { pwmRatio: 0.25, temperatureCelsius: 70, warning: true },
+  ])("gates SYSTEM WARN on cooling demand: %j", ({ pwmRatio, temperatureCelsius, warning }) => {
+    const rendered = renderMonitor(
+      model({
+        system: {
+          ...system,
+          snapshot: {
+            ...system.snapshot,
+            temperatureCelsius,
+            fan: { pwmRatio },
+            memory: { usedBytes: 900, totalBytes: 1000 },
+            cpu: { loadAvg1m: 6, physicalCores: 4 },
+          },
+        },
+      }),
+      config,
+      now,
+    );
+    expect(textsFor(rendered.payload, "front").includes("SYSTEM WARN")).toBe(warning);
+  });
+
   it("pins active and critical states", () => {
     const calling = renderMonitor(model({ status: status("dialing") }), config, now).payload;
     expect(textsFor(calling, "front")).toEqual(["CALLING"]);

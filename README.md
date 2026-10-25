@@ -80,6 +80,10 @@ The four hardware cards use the same booth art. The fan card maps commanded PWM
 or cooling state to `OFF`, `LOW`, `MEDIUM`, `HIGH`, or `MAX` and deliberately
 does not display tachometer RPM. Pi and router temperatures are rounded to whole
 degrees on the front; the rear keeps decimal precision.
+`SYSTEM WARN` appears only when commanded fan PWM (or cooling state) reaches
+75%, or Pi CPU temperature reaches 70°C. Moderate CPU load and memory usage
+no longer trigger it. Critical alerts (including `HOT` at 75°C), throttling,
+and connectivity alarms remain unchanged.
 Weather uses condition-specific artwork for every Home Assistant weather state.
 Its detail badge prefers precipitation probability, then a meaningful humidex
 or wind-chill difference, then the daily high and low.
