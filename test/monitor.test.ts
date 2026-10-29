@@ -1497,6 +1497,29 @@ describe("monitor lifecycle", () => {
     await monitor.stop();
   });
 
+  it("turns LED blinking off at sunset and restores it at sunrise", async () => {
+    const client = createClient();
+    const monitor = new Monitor(config, client);
+    monitor.updateStatus(status("recording"));
+    monitor.updateSystem(system());
+    monitor.updateWeather(weather("above_horizon"));
+
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(client.draw.mock.calls.at(-1)?.[0].led_notification_color).toBe("#FB2C36FF");
+
+    monitor.updateWeather(weather("below_horizon"));
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(client.draw.mock.calls.at(-1)?.[0].led_notification_color).toBeUndefined();
+
+    monitor.updateWeather(weather("above_horizon"));
+    await vi.advanceTimersByTimeAsync(config.renderDebounceMs);
+    expect(client.draw.mock.calls.at(-1)?.[0].led_notification_color).toBe("#FB2C36FF");
+    expect(client.draw).toHaveBeenCalledTimes(3);
+
+    await monitor.stop();
+  });
+
   it("uses 5% hardware brightness from 23:00 until sunrise", async () => {
     expect(
       desiredDisplayBrightness(

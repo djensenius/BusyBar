@@ -2061,15 +2061,17 @@ export const renderMonitor = (
           ),
         };
   const backElements = stableBackElements(backView.elements);
+  const indicator =
+    state.weather?.sunState === "below_horizon" ? null : (frontView.indicator ?? null);
   const frontSignature = JSON.stringify({
-    indicator: frontView.indicator ?? null,
+    indicator,
     elements: frontElements,
   });
   const backSignature = JSON.stringify(backElements);
   const payload: DisplayDrawParams = {
     application_name: config.applicationName,
     priority: config.displayPriority,
-    ...(frontView.indicator ? { led_notification_color: frontView.indicator } : {}),
+    ...(indicator ? { led_notification_color: indicator } : {}),
     elements: [...frontElements, ...backElements],
   };
   return {
