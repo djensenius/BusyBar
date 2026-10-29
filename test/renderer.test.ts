@@ -1666,6 +1666,44 @@ describe("monitor renderer", () => {
     expect(frontFillColors(nighttime).slice(0, 2)).toEqual(["#000000FF", "#000000FF"]);
   });
 
+  it.each<[string, Partial<MonitorState>, string]>([
+    ["recording", { status: status("recording") }, "#FB2C36FF"],
+    [
+      "critical alerts",
+      {
+        system: {
+          ...system,
+          snapshot: { ...system.snapshot, temperatureCelsius: 80 },
+        },
+      },
+      "#FB2C36FF",
+    ],
+    [
+      "car charging",
+      { frontFrame: "carRange", fluxHaus, fluxHausReceivedAtMs: now - 1_000 },
+      "#FFD057FF",
+    ],
+    [
+      "completion alerts",
+      { completionAlert: { id: "washer", label: "Washer", occurredAtMs: now } },
+      "#30D158FF",
+    ],
+  ])("disables %s LED blinking at night without hiding the message", (_name, overrides, color) => {
+    const renderConfig = { ...weatherEnabledConfig, fluxHaus: fluxHausEnabledConfig.fluxHaus };
+    const state = model({ ...overrides, weather, weatherReceivedAtMs: now - 1_000 });
+    const daytime = renderMonitor(state, renderConfig, now);
+    const nighttime = renderMonitor(
+      { ...state, weather: { ...weather, sunState: "below_horizon" } },
+      renderConfig,
+      now,
+    );
+
+    expect(daytime.payload.led_notification_color).toBe(color);
+    expect(nighttime.payload.led_notification_color).toBeUndefined();
+    expect(textsFor(nighttime.payload, "front")).toEqual(textsFor(daytime.payload, "front"));
+    expect(nighttime.alertKind).toBe(daytime.alertKind);
+  });
+
   it.each([
     { pwmRatio: 0.749, temperatureCelsius: 69.9, warning: false },
     { pwmRatio: 0.75, temperatureCelsius: 45, warning: true },

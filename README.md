@@ -251,9 +251,11 @@ BUSY_BAR_WEATHER_PRECIPITATION_ENTITY_ID=sensor.patio_environment_canada_chance_
 The optional companion sensors improve the detail badge. The weather entity
 still supplies current conditions, temperature, and hourly/daily forecasts.
 The standard Home Assistant `sun.sun` entity automatically switches idle cards
-to black backgrounds with condition colors used as accents after sunset. At
-23:00 local time, the monitor sets the hardware brightness to the configured
-late-night level and restores automatic brightness at sunrise. Set
+to black backgrounds with condition colors used as accents after sunset. Status
+LED blinking is disabled in this night mode and returns at sunrise; on-screen
+alerts remain visible. At 23:00 local time, the monitor sets the hardware
+brightness to the configured late-night level and restores automatic brightness
+at sunrise. Set
 `BUSY_BAR_LATE_NIGHT_BRIGHTNESS` from 0 to 100 percent; the default is 5.
 
 ### FluxHaus status
